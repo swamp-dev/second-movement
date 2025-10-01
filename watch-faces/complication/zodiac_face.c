@@ -51,11 +51,10 @@ void zodiac_face_setup(uint8_t watch_face_index, void **context_ptr) {
 
     if (*context_ptr == NULL) {
         *context_ptr = malloc(sizeof(zodiac_face_state_t));
-        zodiac_face_state_t *state = (zodiac_face_state_t *)*context_ptr;
-        memset(state, 0, sizeof(zodiac_face_state_t));
+        memset(*context_ptr, 0, sizeof(zodiac_face_state_t));
 
         // Initialize to the current zodiac sign based on the date
-        state->current_sign_index = get_current_zodiac_sign();
+        ((zodiac_face_state_t *)*context_ptr)->current_sign_index = get_current_zodiac_sign();
     }
 }
 

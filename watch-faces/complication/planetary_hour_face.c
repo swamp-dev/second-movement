@@ -611,7 +611,7 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
     _compute_local_sun_times(yday0, lon, lat, hours_from_utc, &sr_yday, &ss_yday);
 
     watch_date_time_t base_sunrise =
-        (ts_now >= _unix(sr_today) && ts_now < ts_midnight_next) ? sr_yday : sr_today;
+        (ts_now >= _unix(sr_today) && ts_now < ts_midnight_next) ? sr_today : sr_yday;
 
     planet_names_t ruler = planetary_ruler_from_base_and_time(base_sunrise, target_hour_start);
 
@@ -647,10 +647,6 @@ void planetary_hour_face_setup(__attribute__((unused)) uint8_t watch_face_index,
     if (*context_ptr == NULL)
     {
         *context_ptr = malloc(sizeof(planetary_hour_state_t));
-        if (*context_ptr == NULL)
-        {
-            return;
-        }
         memset(*context_ptr, 0, sizeof(planetary_hour_state_t));
     }
 }
