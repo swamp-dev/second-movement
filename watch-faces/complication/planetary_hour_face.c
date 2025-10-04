@@ -76,6 +76,18 @@ static const planet_names_t planet_names[] = {
     {"Mercu", "ME"},
     {"Moon ", "MO"}};
 
+static inline uint32_t _unix(watch_date_time_t t) { return watch_utility_date_time_to_unix_time(t, 0); }
+static inline watch_date_time_t _from_unix(uint32_t ts) { return watch_utility_date_time_from_unix_time(ts, 0); }
+static inline watch_date_time_t _midnight_of(watch_date_time_t t)
+{
+    t.unit.hour = t.unit.minute = t.unit.second = 0;
+    return t;
+}
+static inline watch_date_time_t _add_days(watch_date_time_t day_midnight, int d)
+{
+    return _from_unix(_unix(day_midnight) + 86400u * (uint32_t)(d >= 0 ? d : -d) * (d >= 0 ? 1 : -1));
+}
+
 static lat_lon_settings_t _planetary_hour_face_struct_from_latlon(int16_t val)
 {
     lat_lon_settings_t retval;
@@ -97,13 +109,24 @@ static lat_lon_settings_t _planetary_hour_face_struct_from_latlon(int16_t val)
 
 static void _planetary_hour_set_expiration(planetary_hour_state_t *state, watch_date_time_t next_hours_offset)
 {
-    uint32_t timestamp = watch_utility_date_time_to_unix_time(next_hours_offset, 0);
-    state->hour_offset_expires = watch_utility_date_time_from_unix_time(timestamp + 60, 0);
+    uint32_t timestamp = _unix(next_hours_offset);
+    state->hour_offset_expires = _from_unix(timestamp + 60);
+}
+
+static int get_time_since_sunrise_in_hours(watch_date_time_t sunrise_local,
+                                          watch_date_time_t now)
+{
+    uint32_t sunrise_unix = _unix(sunrise_local);
+    uint32_t hour_start_unix = _unix(now);
+
+    // Calculate the time difference in hours
+    double time_since_sunrise = (double)(hour_start_unix - sunrise_unix) / 3600.0;
+    return (int)floor(time_since_sunrise);
 }
 
 // this will return an entry from the planet_names map
 static planet_names_t planetary_ruler_from_base_and_time(watch_date_time_t base_sunrise_local,
-                                                         watch_date_time_t hour_start_local)
+                                                         int time_since_sunrise)
 {
     // 1. Calculate the day of the week from base_sunrise_local
     int year = base_sunrise_local.unit.year + WATCH_RTC_REFERENCE_YEAR;
@@ -116,62 +139,62 @@ static planet_names_t planetary_ruler_from_base_and_time(watch_date_time_t base_
         month += 12;
         year -= 1;
     }
-
     uint8_t day_of_week = (day + (2 * month) + (3 * (month + 1) / 5) + year + (year / 4) - (year / 100) + (year / 400) + 1) % 7;
-
-    // 2. Calculate the time difference between sunrise and hour_start_local
-    uint32_t sunrise_unix = watch_utility_date_time_to_unix_time(base_sunrise_local, 0);
-    uint32_t hour_start_unix = watch_utility_date_time_to_unix_time(hour_start_local, 0);
-
-    // Handle cases where the sunrise is the day before
-    if (hour_start_unix < sunrise_unix)
-    {
-        hour_start_unix += 86400; // Add 24 hours in seconds
-    }
-
-    // Calculate the time difference in hours
-    double time_since_sunrise = (double)(hour_start_unix - sunrise_unix) / 3600.0;
-    int time_since_sunrise_int = (int)floor(time_since_sunrise);
 
     // 3. Get the ruler of the day from the day of the week
     uint8_t ruler_of_day_index = week_days_to_chaldean_order[day_of_week];
 
     // 4. Calculate the planetary ruler of the hour
-    int ruler_index = (ruler_of_day_index + time_since_sunrise_int) % 7;
+    int ruler_index = (ruler_of_day_index + time_since_sunrise) % 7;
 
     // Return the corresponding planet from the planet_names map
     return planet_names[ruler_index];
 }
 
 // --- Small time helpers (same rounding/carry style as your sunrise/sunset face) ---
-static watch_date_time_t _local_decimal_hours_to_dt(watch_date_time_t day_local, double local_hours_dec)
-{
+static watch_date_time_t _local_decimal_hours_to_dt(watch_date_time_t day_local, double local_hours_dec) {
     watch_date_time_t t = day_local;
 
-    double minutes = 60.0 * fmod(local_hours_dec, 1.0);
+    // Extract the integer part of local_hours_dec as the hour
+    int hour = (int)floor(local_hours_dec);
+    double fractional_hour = local_hours_dec - hour;
+
+    // Adjust for day rollover if the hour is negative or exceeds 23
+    if (hour < 0) {
+        hour += 24;
+        uint32_t ts = _unix(day_local);
+        ts -= 86400; // Subtract one day
+        t = _from_unix(ts);
+    } else if (hour >= 24) {
+        hour -= 24;
+        uint32_t ts = _unix(day_local);
+        ts += 86400; // Add one day
+        t = _from_unix(ts);
+    }
+
+    t.unit.hour = (uint8_t)hour;
+
+    // Calculate the fractional part for minutes and seconds
+    double minutes = 60.0 * fractional_hour;
     double seconds = 60.0 * fmod(minutes, 1.0);
 
-    t.unit.hour = (uint8_t)floor(local_hours_dec);
+    printf("Debug: Converting decimal hours to date-time. Decimal hours: %.2f, Hour: %d, Minutes: %.2f, Seconds: %.2f\n",
+           local_hours_dec, t.unit.hour, minutes, seconds);
+
     t.unit.minute = (seconds < 30.0) ? (uint8_t)floor(minutes) : (uint8_t)ceil(minutes);
 
-    if (t.unit.minute == 60)
-    {
+    if (t.unit.minute == 60) {
         t.unit.minute = 0;
         t.unit.hour = (uint8_t)((t.unit.hour + 1) % 24);
-        if (t.unit.hour == 0)
-        {
-            uint32_t ts = watch_utility_date_time_to_unix_time(t, 0);
+        if (t.unit.hour == 0) {
+            uint32_t ts = _unix(t);
             ts += 86400;
-            t = watch_utility_date_time_from_unix_time(ts, 0);
+            t = _from_unix(ts);
         }
     }
-    while (t.unit.hour >= 24)
-    {
-        t.unit.hour -= 24;
-        uint32_t ts = watch_utility_date_time_to_unix_time(t, 0);
-        ts += 86400;
-        t = watch_utility_date_time_from_unix_time(ts, 0);
-    }
+
+    printf("Debug: Converted time: %02d:%02d\n", t.unit.hour, t.unit.minute);
+
     return t;
 }
 
@@ -184,204 +207,27 @@ static bool _compute_local_sun_times(watch_date_time_t day_local,
     uint8_t result = sun_rise_set(day_local.unit.year + WATCH_RTC_REFERENCE_YEAR,
                                   day_local.unit.month, day_local.unit.day,
                                   lon, lat, &rise_utc_dec, &set_utc_dec);
+
+    printf("Debug: Computing sun times for date: %04d-%02d-%02d, lon: %.2f, lat: %.2f, UTC offset: %.2f\n",
+           day_local.unit.year + WATCH_RTC_REFERENCE_YEAR, day_local.unit.month, day_local.unit.day, lon, lat, hours_from_utc);
+    printf("Debug: Raw sunrise (UTC): %.2f, Raw sunset (UTC): %.2f\n", rise_utc_dec, set_utc_dec);
+
     if (result != 0)
+    {
+        printf("Debug: Error in sun_rise_set calculation, result: %d\n", result);
         return false; // polar day/night or error
+    }
+
     *sunrise_local = _local_decimal_hours_to_dt(day_local, rise_utc_dec + hours_from_utc);
     *sunset_local = _local_decimal_hours_to_dt(day_local, set_utc_dec + hours_from_utc);
+
+    printf("Debug: Local sunrise: %02d:%02d, Local sunset: %02d:%02d\n",
+           sunrise_local->unit.hour, sunrise_local->unit.minute,
+           sunset_local->unit.hour, sunset_local->unit.minute);
+
     return true;
 }
 
-static inline uint32_t _unix(watch_date_time_t t) { return watch_utility_date_time_to_unix_time(t, 0); }
-static inline watch_date_time_t _from_unix(uint32_t ts) { return watch_utility_date_time_from_unix_time(ts, 0); }
-static inline watch_date_time_t _midnight_of(watch_date_time_t t)
-{
-    t.unit.hour = t.unit.minute = t.unit.second = 0;
-    return t;
-}
-static inline watch_date_time_t _add_days(watch_date_time_t day_midnight, int d)
-{
-    return _from_unix(_unix(day_midnight) + 86400u * (uint32_t)(d >= 0 ? d : -d) * (d >= 0 ? 1 : -1));
-}
-
-// A "segment" is either day (sunrise→sunset) or night (sunset→next sunrise). It’s keyed by the day it starts on.
-typedef struct
-{
-    bool is_day;             // true = day seg, false = night seg
-    watch_date_time_t day0;  // local midnight for the "day" the segment is keyed to
-    watch_date_time_t start; // local
-    watch_date_time_t end;   // local
-    double hour_len_sec;     // seconds length for one of the 12 hours in this segment
-} ph_segment_t;
-
-// Build a segment for a given local day (midnight) and type.
-static bool _build_segment(bool is_day,
-                           watch_date_time_t day0,
-                           double lon, double lat, double hours_from_utc,
-                           ph_segment_t *seg)
-{
-    watch_date_time_t sr, ss;
-    if (!_compute_local_sun_times(day0, lon, lat, hours_from_utc, &sr, &ss))
-        return false;
-
-    watch_date_time_t sr_next, ss_dummy;
-    if (!is_day)
-    {
-        watch_date_time_t day1 = _add_days(day0, 1);
-        if (!_compute_local_sun_times(day1, lon, lat, hours_from_utc, &sr_next, &ss_dummy))
-            return false;
-    }
-
-    seg->is_day = is_day;
-    seg->day0 = day0;
-    if (is_day)
-    {
-        seg->start = sr;
-        seg->end = ss;
-    }
-    else
-    {
-        seg->start = ss;    // sunset(today)
-        seg->end = sr_next; // sunrise(tomorrow)
-    }
-    double seg_len_sec = (double)((int32_t)_unix(seg->end) - (int32_t)_unix(seg->start));
-    if (seg_len_sec <= 0.0)
-        seg_len_sec = 1.0; // guard
-    seg->hour_len_sec = seg_len_sec / 12.0;
-    return true;
-}
-
-// Decide which segment "now" is in, and what "day0" that segment uses.
-static bool _locate_segment_for_now(watch_date_time_t now_local,
-                                    double lon, double lat, double hours_from_utc,
-                                    ph_segment_t *seg)
-{
-    watch_date_time_t today0 = _midnight_of(now_local);
-    watch_date_time_t sr_today, ss_today;
-    if (!_compute_local_sun_times(today0, lon, lat, hours_from_utc, &sr_today, &ss_today))
-        return false;
-
-    uint32_t ts_now = _unix(now_local);
-    if (ts_now >= _unix(sr_today) && ts_now < _unix(ss_today))
-    {
-        return _build_segment(true, today0, lon, lat, hours_from_utc, seg); // day of today
-    }
-    else if (ts_now >= _unix(ss_today))
-    {
-        return _build_segment(false, today0, lon, lat, hours_from_utc, seg); // night keyed to today
-    }
-    else
-    {
-        watch_date_time_t yday0 = _add_days(today0, -1);
-        return _build_segment(false, yday0, lon, lat, hours_from_utc, seg); // pre-sunrise → last night's segment
-    }
-}
-
-// Get start of the hour containing 'ref' within seg, idx in [0..11].
-static watch_date_time_t _hour_start_in_segment(const ph_segment_t *seg,
-                                                watch_date_time_t ref,
-                                                int *out_idx)
-{
-    uint32_t ts_ref = _unix(ref), ts_s = _unix(seg->start), ts_e = _unix(seg->end);
-    if (ts_ref < ts_s)
-        ts_ref = ts_s;
-    if (ts_ref >= ts_e)
-        ts_ref = ts_e - 1;
-
-    double pos = (double)((int32_t)ts_ref - (int32_t)ts_s);
-    int idx = (int)floor(pos / seg->hour_len_sec);
-    if (idx < 0)
-        idx = 0;
-    if (idx > 11)
-        idx = 11;
-
-    uint32_t ts_hour_start = ts_s + (uint32_t)floor(seg->hour_len_sec * (double)idx);
-    if (out_idx)
-        *out_idx = idx;
-    return _from_unix(ts_hour_start);
-}
-
-// Advance (or rewind) hour starts by K steps across segments.
-static bool _advance_hour_start(watch_date_time_t now_local,
-                                int32_t k,
-                                double lon, double lat, double hours_from_utc,
-                                watch_date_time_t *out_hour_start,
-                                ph_segment_t *out_seg)
-{
-    ph_segment_t seg;
-    if (!_locate_segment_for_now(now_local, lon, lat, hours_from_utc, &seg))
-        return false;
-
-    int idx;
-    watch_date_time_t hour_start = _hour_start_in_segment(&seg, now_local, &idx);
-
-    while (k != 0)
-    {
-        if (k > 0)
-        {
-            int remaining_in_seg = 11 - idx;
-            if (k <= remaining_in_seg)
-            {
-                // stay in this segment
-                uint32_t ts = _unix(hour_start) + (uint32_t)floor(seg.hour_len_sec * (double)k);
-                hour_start = _from_unix(ts);
-                idx += k;
-                k = 0;
-            }
-            else
-            {
-                // jump to next segment's first hour
-                k -= (remaining_in_seg + 1);
-                // next segment: day -> night(today), night -> day(tomorrow)
-                watch_date_time_t next_day0 = seg.day0;
-                bool next_is_day = !seg.is_day;
-                if (!seg.is_day)
-                { // night -> next day
-                    next_day0 = _add_days(seg.day0, 1);
-                }
-                if (!_build_segment(next_is_day, next_day0, lon, lat, hours_from_utc, &seg))
-                    return false;
-                hour_start = seg.start; // first hour start in next segment
-                idx = 0;
-            }
-        }
-        else
-        {                          // k < 0
-            int back_in_seg = idx; // how many we can go back within this segment
-            int need = -k;
-            if (need <= back_in_seg)
-            {
-                uint32_t ts = _unix(hour_start) - (uint32_t)floor(seg.hour_len_sec * (double)need);
-                hour_start = _from_unix(ts);
-                idx -= need;
-                k = 0;
-            }
-            else
-            {
-                // go to previous segment's last hour
-                k += (back_in_seg + 1);
-                // previous segment: day -> night(yesterday), night -> day(today)
-                watch_date_time_t prev_day0 = seg.day0;
-                bool prev_is_day = !seg.is_day;
-                if (seg.is_day)
-                { // day -> previous night's segment (keyed to yesterday)
-                    prev_day0 = _add_days(seg.day0, -1);
-                }
-                ph_segment_t pseg;
-                if (!_build_segment(prev_is_day, prev_day0, lon, lat, hours_from_utc, &pseg))
-                    return false;
-                hour_start = _from_unix(_unix(pseg.start) + (uint32_t)floor(pseg.hour_len_sec * 11.0));
-                seg = pseg;
-                idx = 11;
-            }
-        }
-    }
-
-    if (out_hour_start)
-        *out_hour_start = hour_start;
-    if (out_seg)
-        *out_seg = seg;
-    return true;
-}
 
 static void _planetary_hour_face_advance_digit(planetary_hour_state_t *state)
 {
@@ -564,6 +410,8 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
         movement_location.bit.latitude = longLatPresets[state->longLatToUse].latitude;
         movement_location.bit.longitude = longLatPresets[state->longLatToUse].longitude;
     }
+
+    // error out if no location is set on the watch or presets
     if (movement_location.reg == 0)
     {
         watch_display_text_with_fallback(WATCH_POSITION_TOP, "PHour ", "PH");
@@ -571,6 +419,7 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
         return;
     }
 
+    // get the current time and location
     watch_date_time_t now_local = movement_get_local_date_time();
     int16_t lat_centi = (int16_t)movement_location.bit.latitude;
     int16_t lon_centi = (int16_t)movement_location.bit.longitude;
@@ -579,41 +428,45 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
     double hours_from_utc = ((double)movement_get_current_timezone_offset()) / 3600.0;
 
     // Find the target hour start by advancing hour_offset steps from "current planetary hour"
-    watch_date_time_t target_hour_start;
-    ph_segment_t seg_at_target;
-    if (!_advance_hour_start(now_local, state->hour_offset, lon, lat, hours_from_utc,
-                             &target_hour_start, &seg_at_target))
-    {
-        // Fallback if polar day/night or compute error
-        watch_clear_colon();
-        watch_clear_indicator(WATCH_INDICATOR_PM);
-        watch_clear_indicator(WATCH_INDICATOR_24H);
-        watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "PHour", "PH");
-        watch_display_text(WATCH_POSITION_BOTTOM, "None  ");
-        return;
-    }
+
+    uint32_t unix_time = _unix(now_local);
+    unix_time += state->hour_offset * 3600;
+
+    watch_date_time_t target_time = _from_unix(unix_time);
+
+    // Find the start of the current hour
+    unix_time -= (unix_time % 3600);
 
     // ----- Planetary base selection (your rule; anchored to "now") -----
-    watch_date_time_t today0 = _midnight_of(now_local);
-    watch_date_time_t sr_today, ss_today;
-    if (!_compute_local_sun_times(today0, lon, lat, hours_from_utc, &sr_today, &ss_today))
+    watch_date_time_t target0 = _midnight_of(target_time);
+    watch_date_time_t sr_target, ss_target;
+    if (!_compute_local_sun_times(target0, lon, lat, hours_from_utc, &sr_target, &ss_target))
     {
         watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "PHour", "PH");
         watch_display_text(WATCH_POSITION_BOTTOM, "None  ");
         return;
     }
-    uint32_t ts_now = _unix(target_hour_start);
-    _planetary_hour_set_expiration(state, target_hour_start);
 
-    uint32_t ts_midnight_next = _unix(today0) + 86400;
-    watch_date_time_t yday0 = _add_days(today0, -1);
+    uint32_t ts_now = _unix(target_time);
+    _planetary_hour_set_expiration(state, now_local);
+
+    uint32_t ts_midnight_next = _unix(target0) + 86400;
+    watch_date_time_t yday0 = _add_days(target0, -1);
     watch_date_time_t sr_yday, ss_yday;
     _compute_local_sun_times(yday0, lon, lat, hours_from_utc, &sr_yday, &ss_yday);
 
     watch_date_time_t base_sunrise =
-        (ts_now >= _unix(sr_today) && ts_now < ts_midnight_next) ? sr_today : sr_yday;
+        (ts_now >= _unix(sr_target) && ts_now < ts_midnight_next) ? sr_target : sr_yday;
 
-    planet_names_t ruler = planetary_ruler_from_base_and_time(base_sunrise, target_hour_start);
+    int hours_since_sunrise = get_time_since_sunrise_in_hours(base_sunrise, target_time);
+    planet_names_t ruler = planetary_ruler_from_base_and_time(base_sunrise, hours_since_sunrise);
+    // Calculate the display time by adding the hours since sunrise to the base sunrise time
+    // and subtracting one minute for each hour since sunrise to account for offsets.
+    uint32_t display_time_unix = _unix(base_sunrise) + (hours_since_sunrise * 3600) - (hours_since_sunrise * 60);
+    watch_date_time_t display_time = _from_unix(display_time_unix);
+    printf("Base sunrise: %02d:%02d, Hours since sunrise: %d, Ruler: %s\n, display time: %02d:%02d, Day: %d\n",
+           base_sunrise.unit.hour, base_sunrise.unit.minute,
+           hours_since_sunrise, ruler.name, display_time.unit.hour, display_time.unit.minute, display_time.unit.day);
 
     // ---- DISPLAY ----
     watch_set_colon();
@@ -621,7 +474,7 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
         watch_set_indicator(WATCH_INDICATOR_24H);
     if (!movement_clock_mode_24h())
     {
-        watch_date_time_t disp = target_hour_start;
+        watch_date_time_t disp = display_time;
         if (watch_utility_convert_to_12_hour(&disp))
             watch_set_indicator(WATCH_INDICATOR_PM);
         else
@@ -634,10 +487,10 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
 
     watch_display_text_with_fallback(WATCH_POSITION_TOP, ruler.name, ruler.abbreviation);
 
-    watch_date_time_t disp2 = target_hour_start;
+    watch_date_time_t disp = display_time;
     if (!movement_clock_mode_24h())
-        (void)watch_utility_convert_to_12_hour(&disp2);
-    sprintf(buf, "%2d%02d%2d", disp2.unit.hour, disp2.unit.minute, target_hour_start.unit.day);
+        (void)watch_utility_convert_to_12_hour(&disp);
+    sprintf(buf, "%2d%02d%2d", disp.unit.hour, disp.unit.minute, disp.unit.day);
     watch_display_text(WATCH_POSITION_BOTTOM, buf);
 }
 
@@ -745,19 +598,7 @@ bool planetary_hour_face_loop(movement_event_t event, void *context)
         break;
 
     case EVENT_TIMEOUT:
-        if (load_location_from_filesystem().reg == 0)
-        {
-            // if no location set, return home
-            movement_move_to_face(0);
-        }
-        else if (state->location_state.page || state->hour_offset)
-        {
-            // otherwise on timeout, exit settings mode and return to the current planetary hour
-            state->location_state.page = 0;
-            state->hour_offset = 0;
-            movement_request_tick_frequency(1);
-            _planetary_hour_face_update(state);
-        }
+        movement_move_to_face(0);
         break;
 
     case EVENT_LIGHT_BUTTON_DOWN:
