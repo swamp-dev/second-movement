@@ -63,6 +63,9 @@ const watch_face_t watch_faces[] = {
 #define MOVEMENT_DEFAULT_GREEN_COLOR 0xF
 #define MOVEMENT_DEFAULT_BLUE_COLOR 0x0
 
+/* Set to true to use imperial units (Fahrenheit, miles, etc) or false for metric units (Celsius, kilometers, etc) */
+#define MOVEMENT_DEFAULT_IMPERIAL_UNITS true
+
 /* Set to true for 24h mode or false for 12h mode */
 #define MOVEMENT_DEFAULT_24H_MODE false
 

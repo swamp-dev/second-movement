@@ -637,6 +637,7 @@ void app_init(void) {
         movement_state.settings.bit.time_zone = UTZ_UTC;
         movement_state.settings.bit.led_red_color = MOVEMENT_DEFAULT_RED_COLOR;
         movement_state.settings.bit.led_green_color = MOVEMENT_DEFAULT_GREEN_COLOR;
+        movement_state.settings.bit.use_imperial_units = MOVEMENT_DEFAULT_IMPERIAL_UNITS;
     #if defined(WATCH_BLUE_TCC_CHANNEL) && !defined(WATCH_GREEN_TCC_CHANNEL)
         // If there is a blue LED but no green LED, this is a blue Special Edition board.
         // In the past, the "green color" showed up as the blue color on the blue board.
