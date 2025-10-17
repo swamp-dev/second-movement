@@ -32,11 +32,9 @@
 #include "sunriset.h"
 #include "watch.h"
 #include "watch_utility.h"
-#include "movement.h"
 #include "watch_rtc.h" // For WATCH_RTC_REFERENCE_YEAR and related RTC definitions
 #include <string.h>
 #include <math.h> // Ensure math functions are available
-#include <time.h>
 #include <stdlib.h>
 #include "filesystem.h"
 #include <stdio.h> // For debug logging
@@ -58,13 +56,6 @@ static const uint8_t week_days_to_chaldean_order[] = {
     4, // Friday
     0  // Saturday
 };
-
-// Define the struct for planet names and abbreviations
-typedef struct
-{
-    const char *name;
-    const char *abbreviation;
-} planet_names_t;
 
 // Map of the Chaldean order numbers to the planets and abbreviations
 static const planet_names_t planet_names[] = {
@@ -461,8 +452,7 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
     int hours_since_sunrise = get_time_since_sunrise_in_hours(base_sunrise, target_time);
     planet_names_t ruler = planetary_ruler_from_base_and_time(base_sunrise, hours_since_sunrise);
     // Calculate the display time by adding the hours since sunrise to the base sunrise time
-    // and subtracting one minute for each hour since sunrise to account for offsets.
-    uint32_t display_time_unix = _unix(base_sunrise) + (hours_since_sunrise * 3600) - (hours_since_sunrise * 60);
+    uint32_t display_time_unix = _unix(base_sunrise) + (hours_since_sunrise * 3600); // - (hours_since_sunrise * 60); // remove one minute per hour for offset
     watch_date_time_t display_time = _from_unix(display_time_unix);
     printf("Base sunrise: %02d:%02d, Hours since sunrise: %d, Ruler: %s\n, display time: %02d:%02d, Day: %d\n",
            base_sunrise.unit.hour, base_sunrise.unit.minute,

@@ -37,6 +37,14 @@ typedef struct {
     location_state_t location_state; 
 } planetary_hour_state_t;
 
+// struct for planet names and abbreviations
+typedef struct
+{
+    const char *name;
+    const char *abbreviation;
+} planet_names_t;
+
+
 void planetary_hour_face_setup(uint8_t watch_face_index, void **context_ptr);
 void planetary_hour_face_activate(void *context);
 bool planetary_hour_face_loop(movement_event_t event, void *context);
