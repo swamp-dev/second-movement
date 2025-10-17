@@ -28,7 +28,7 @@
 #include "movement.h"
 
 typedef struct {
-    uint8_t current_sign_index; // Index of the current zodiac sign
+    int8_t current_sign_index; // Index of the current zodiac sign
 } zodiac_face_state_t;
 
 void zodiac_face_setup(uint8_t watch_face_index, void **context_ptr);
