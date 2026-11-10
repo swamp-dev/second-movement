@@ -1,10 +1,9 @@
 # Ticket workflow
 
-How a change to this repo goes from ticket to merged PR. **This doc is the
-source of truth.** `CLAUDE.md`, the global rules under
-`~/.dotfiles/.claude/rules/`, and the skills (`/full-send`, `/start-ticket`,
-`/finish-ticket`, `/ship-ticket`) all defer to it. If you change the
-workflow, change it here first.
+**This doc is the source of truth for this repo's ticket workflow.** Where
+`CLAUDE.md`, the skills (`/full-send`, `/start-ticket`, `/finish-ticket`,
+`/ship-ticket`) or `~/.dotfiles/.claude/rules/` differ from it, this doc
+wins.
 
 Build, toolchain and face-registration details are in
 [`../CLAUDE.md`](../CLAUDE.md).
@@ -18,7 +17,7 @@ Build, toolchain and face-registration details are in
 | 1 | Worktree and branch off the latest `origin/main`, then read the ticket in full and claim it | `/start-ticket <N>` |
 | 2 | Implement it (see [Testing](#testing)) | manual |
 | 3 | Run the per-PR checklist below, then open the PR | `/finish-ticket` |
-| 4 | Wait for hosted CI (`Build` workflow, all 16 jobs) to go green | `gh pr checks <P>` |
+| 4 | Wait for hosted CI to go green: every `build` and `build-simulator` job of the `Build` workflow, for both the push run and the pull_request run | `gh pr checks <P>` |
 | 5 | Merge and clean up, or hand the PR to the user (see [Merge authority](#merge-authority)) | `/ship-ticket <P>` |
 
 Do the steps in order and don't skip any. `/full-send` loops steps 1–5
@@ -42,13 +41,23 @@ This restates `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`.
 5. **Re-review when the fixes were substantial**, meaning any of:
    - new files since the first review;
    - more than 50 net lines added since then;
-   - a new non-`static` function or a changed face entry point;
+   - a new non-`static` function, or a changed signature for
+     `_face_setup`, `_activate`, `_loop` or `_resign`;
    - a fix in an area the first review flagged as critical or significant.
 
-The PR body records what ran under a **Per-PR checklist** heading: the
-reviewers, the findings addressed, and the `scripts/ci-local.sh` result for
-the head commit. This repo has no stamp file, so that section is what
-`/ship-ticket`'s session attestation checks against.
+The PR body records what ran under a **Per-PR checklist** heading:
+- which reviewers ran (`code-reviewer`, plus `docs-reviewer` when
+  triggered) and which findings were addressed;
+- `scripts/ci-local.sh` (full matrix): `all combinations passed` at
+  `<head SHA>`.
+
+Update that section every time you push a new head.
+
+This repo has no stamp file. Instead of asking the user, `/ship-ticket`
+step 3 checks it itself: merge only if **this session** ran every item above
+and the recorded SHA equals the PR's `headRefOid`. If not (for example, a
+new session after `/handoff` or `/resume`), re-run the checklist on the
+current head or hand the PR to the user.
 
 ---
 
@@ -60,10 +69,12 @@ the head commit. This repo has no stamp file, so that section is what
   in the PR that tests are pending #15.
 - **Display, buttons and face flow:** check in the simulator
   (`emmake make …`, see `CLAUDE.md`) and describe what you checked in the
-  PR.
+  PR. If you can't drive a browser, say so in the Test plan and leave the
+  check to the user in a `manual-task` issue.
 - **On-watch behaviour** (power, sleep, sensors, real time passing): an
-  agent can't check this. Open a `manual-task` issue (group `devices`) in
-  the same PR saying what to flash and what to look for.
+  agent can't check this. Before opening the PR, open a `manual-task` issue
+  (group `devices`) saying what to flash and what to look for, and link it
+  under Manual follow-ups.
 
 ---
 
@@ -84,11 +95,15 @@ the user merges. **This repo relaxes that.** The agent may merge through
 These PRs always go to the user to merge, even when every condition holds:
 
 - **Gate-introducing PRs:** changes to this doc, `CLAUDE.md`'s CI commands
-  section, `scripts/ci-local.sh`, `.claude/settings.json`, or
+  or Testing sections, `scripts/ci-local.sh`, anything under `.claude/`, or
   `.github/workflows/`.
 - Submodule pointer bumps (`gossamer`, `littlefs`, `tinyusb`, `utz`).
-- Upstream syncs from `joeycastillo/second-movement`, and anything touching
-  `KnightConfig`.
+- Upstream syncs from `joeycastillo/second-movement`.
+
+For these, stop `/ship-ticket` before step 5 (merge). Print the PR URL and
+its CI status, and leave the claim, worktree and branch in place. After the
+user merges, post the closeout comment (`/ship-ticket` step 6 format) and
+clean up (step 7).
 
 **Admin merge** (bypassing hosted CI) is never the agent's call. It's
 governed by `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`, and the
@@ -99,11 +114,12 @@ user decides.
 ## Branches, worktrees, commits
 
 - **Worktree:** `../sm-<N>-<slug>`. The `sm-` prefix avoids clashes with
-  other repos in `~/dev/`. This overrides the skills' default
-  `../<N>-<slug>`.
+  other repos in `~/dev/`. Use it wherever a skill writes or derives
+  `../<N>-<slug>`: `/start-ticket` steps 5, 5b, 6, 7 and 8, and
+  `/ship-ticket` steps 2, 3, 7 and 8.
 - **Branch:** `<type>/<N>-<slug>`, where `<type>` is one of `feat`, `fix`,
-  `chore`, `refactor`, `test` or `docs`. Branch from `origin/main` and
-  target PRs at `main`.
+  `chore`, `refactor`, `test` or `docs`. The `documentation` label maps to
+  `docs`. Branch from `origin/main` and target PRs at `main`.
 - **New worktrees need submodules:** run
   `git submodule update --init --recursive` right after
   `git worktree add`. This replaces `/start-ticket`'s "install
@@ -120,10 +136,10 @@ user decides.
 
 ## Manual tasks
 
-Work only the user can do (flash the watch and check behaviour, sync
-upstream, update `KnightConfig`) goes in a GitHub issue labelled
-`manual-task` plus a group label (`devices` for anything on the watch).
-Open it in the same PR that creates the need. Add `priority:high` when the
+Work only the user can do (flash the watch and check behaviour) goes in a
+GitHub issue labelled `manual-task` plus a group label (`devices` for
+anything on the watch). Open it before the PR that creates the need, and
+link it in that PR's Manual follow-ups. Add `priority:high` when the
 merged code is unverified until the task is done. Only the user closes
 these issues.
 

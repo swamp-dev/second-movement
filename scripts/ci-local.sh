@@ -9,7 +9,8 @@
 # flake's dev shell (flake.nix).
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+cd "$(dirname "$self")/.."
 
 if ! command -v arm-none-eabi-gcc >/dev/null || ! command -v emmake >/dev/null; then
   if [[ -n "${CI_LOCAL_IN_NIX:-}" ]]; then
@@ -17,21 +18,24 @@ if ! command -v arm-none-eabi-gcc >/dev/null || ! command -v emmake >/dev/null; 
     exit 1
   fi
   export CI_LOCAL_IN_NIX=1
-  exec nix --extra-experimental-features 'nix-command flakes' develop -c "$0" "$@"
+  exec nix --extra-experimental-features 'nix-command flakes' develop -c "$self" "$@"
 fi
 
-if git submodule status | grep -q '^-'; then
+if [[ -n "$(git submodule status --recursive | grep '^-' || true)" ]]; then
   echo "error: submodules not initialized; run: git submodule update --init --recursive" >&2
   exit 1
 fi
 
 boards=(sensorwatch_red sensorwatch_green sensorwatch_blue sensorwatch_pro)
 displays=(classic custom)
+if [[ $# -gt 2 ]]; then
+  echo "usage: $0 [BOARD [DISPLAY]]" >&2
+  exit 2
+fi
 if [[ $# -ge 1 ]]; then boards=("$1"); fi
 if [[ $# -ge 2 ]]; then displays=("$2"); fi
 
-logs="${TMPDIR:-/tmp}/ci-local"
-mkdir -p "$logs"
+logs="$(mktemp -d "${TMPDIR:-/tmp}/ci-local.XXXXXX")"
 jobs="$(nproc)"
 
 run() { # run <label> <command...>
@@ -57,7 +61,7 @@ for board in "${boards[@]}"; do
     # Serial, like hosted CI: a parallel emscripten build intermittently
     # failed to link (`undefined symbol: free`).
     run "simulator-$board-$display" emmake make BOARD="$board" DISPLAY="$display"
-    test -f build-sim/firmware.html
+    test -f build-sim/firmware.html -a -f build-sim/firmware.wasm -a -f build-sim/firmware.js
   done
 done
 

@@ -22,15 +22,13 @@ how a ticket becomes a merged PR. Read it before starting work.
 
 ## Toolchain
 
-You need `arm-none-eabi-gcc` (firmware), `emcc`/`emmake` (simulator) and
-GNU make. `flake.nix` provides all three:
-
-```bash
-nix --extra-experimental-features 'nix-command flakes' develop   # or direnv: .envrc runs `use flake`
-```
-
-`.devcontainer/` is the alternative. On Debian or Ubuntu,
-`apt install gcc-arm-none-eabi` plus an emsdk install also works.
+You need `arm-none-eabi-gcc` (firmware), `emcc`/`emmake` (simulator), GNU
+make, and `python3`, which the build uses to run `gossamer/utils/uf2/uf2conv.py`.
+`flake.nix` provides the first three. If `command -v arm-none-eabi-gcc emmake`
+prints nothing, prefix every build command with
+`nix --extra-experimental-features 'nix-command flakes' develop -c`. Each Bash
+call is a new shell, so an interactive `nix develop` (or direnv's
+`use flake`) doesn't carry over. `.devcontainer/` is an alternative.
 
 Submodules must be checked out:
 
@@ -42,21 +40,24 @@ git submodule update --init --recursive     # existing clone or new worktree
 ## Build
 
 ```bash
-make BOARD=sensorwatch_red DISPLAY=custom        # firmware → build/firmware.uf2
-emmake make BOARD=sensorwatch_red DISPLAY=custom # simulator → build-sim/firmware.html
-python3 -m http.server -d build-sim              # open http://localhost:8000/firmware.html
+nix=(nix --extra-experimental-features 'nix-command flakes' develop -c)   # drop if the toolchain is on PATH
+"${nix[@]}" make BOARD=sensorwatch_red DISPLAY=custom        # firmware → build/firmware.uf2
+"${nix[@]}" emmake make BOARD=sensorwatch_red DISPLAY=custom # simulator → build-sim/firmware.html
+python3 -m http.server -d build-sim   # in the background; open http://localhost:8000/firmware.html
 ```
+
+A firmware build worked if it ends with the `size` table and
+`build/firmware.uf2` exists.
 
 - `BOARD`: `sensorwatch_red` (Sensor Watch Lite), `sensorwatch_green`,
   `sensorwatch_blue`, `sensorwatch_pro`.
-- `DISPLAY`: `classic` or `custom`. `autodetect` exists but the Makefile
-  warns it's unreliable, so don't use it. Always put `DISPLAY` on the
-  command line. An X11 `DISPLAY=:0` in the environment would otherwise
-  cause an "invalid DISPLAY type" error.
+- `DISPLAY`: `classic` or `custom` (the Makefile warns that `autodetect` is
+  unreliable). Always pass it on the command line. An X11 `DISPLAY=:0` from
+  the environment fails with "invalid DISPLAY type".
 - `TIMESET=year|day|minute` bakes the host clock into the firmware.
   `NOSLEEP=1` disables low-energy mode.
-- Run `make clean` (or `rm -rf build build-sim`) when you switch `BOARD` or
-  `DISPLAY`.
+- Run `rm -rf build build-sim` when you switch `BOARD` or `DISPLAY`.
+  `make clean` removes only `build/`.
 
 ## CI commands
 
@@ -68,17 +69,22 @@ scripts/ci-local.sh                         # full matrix, 16 builds: the PR gat
 scripts/ci-local.sh sensorwatch_red custom  # one combination, for iterating
 ```
 
-The script enters the nix shell on its own and stops at the first failing
-build. There's no lint step, and no unit tests until #15 lands (see
-[Testing](#testing)).
+The script enters the nix shell on its own, wipes `build/` and `build-sim/`,
+and stops at the first failing build. There's no lint step, and no unit
+tests until #15 lands. Local builds use the flake's GCC 14, while hosted CI
+uses the older GCC in its `mbed-os-env:latest` image. GCC 14 is stricter, so
+a local pass and a hosted pass are separate checks, and both are required.
 
 ## Adding a face
 
-1. Generate the files. Run this from `template/`, since its paths are
-   relative:
+1. Generate the files. The script's paths are relative to `template/`, so
+   run it in a subshell:
    ```bash
-   cd template && python3 watch_face.py complication my_thing --author-name "Your Name"
+   (cd template && python3 watch_face.py complication my_thing --author-name "<your name>")
    ```
+   It worked only if it prints `Successfully generated`. It exits 0 even
+   when it fails, so if that line is missing, run `git diff` and revert any
+   half-made edit.
    This creates `watch-faces/complication/my_thing_face.{c,h}`. It also
    adds the `#include` above `// New includes go above this line.` in
    `movement_faces.h`, and the `.c` above `# New watch faces go above this
@@ -91,8 +97,8 @@ build. There's no lint step, and no unit tests until #15 lands (see
    are left out of the normal MODE rotation. They're reached by
    long-pressing MODE on the first face. Insert a regular face before those
    five.
-4. Build. Enabling more faces than the watch can store fails at compile
-   time, so remove a face if that happens.
+4. Build with `scripts/ci-local.sh sensorwatch_red custom`. If the link fails
+   with "region `flash' overflowed", remove a face from `watch_faces[]`.
 
 ## Gotchas
 
@@ -106,12 +112,12 @@ build. There's no lint step, and no unit tests until #15 lands (see
   (`_default_timer_values` in `watch-faces/complication/timer_face.c`).
 - Faces that need a location (`planetary_hour_face`, `sunrise_sunset_face`)
   share one stored location through `load_location_from_filesystem()`
-  (`filesystem.h`). Both faces have their own editor for it.
+  (`filesystem/filesystem.h`). Both faces have their own editor for it.
 
 ## Flashing
 
-You do this step by hand on the hardware, so it's a `manual-task`, not
-something an agent can verify. Plug in the watch and double-tap the reset
+Only the user can flash the watch, so put these steps in a `manual-task`
+issue. Plug in the watch and double-tap the reset
 button on the back. The LED pulses red and a `WATCHBOOT` drive appears. Then
 run `make install`, or copy `build/firmware.uf2` onto `WATCHBOOT`.
 
@@ -120,10 +126,10 @@ run `make install`, or copy `build/firmware.uf2` onto `WATCHBOOT`.
 - `main` holds shared changes. **All PRs target `main`.**
 - `KnightConfig` is the personal build for the red board with the custom
   display: its own face list and timer defaults. The owner merges `main`
-  into it. Never rebase it, push to it or open PRs against it.
+  into it, and agents never touch it
+  ([workflow](docs/workflow.md#branches-worktrees-commits)).
 - `origin` is `swamp-dev/second-movement`. The upstream is
-  `joeycastillo/second-movement`, and this fork is about 292 commits behind
-  it as of 2026-11. To compare:
+  `joeycastillo/second-movement`. To compare:
   ```bash
   git remote add upstream https://github.com/joeycastillo/second-movement.git
   git fetch upstream && git log --oneline main..upstream/main
@@ -133,12 +139,7 @@ run `make install`, or copy `build/firmware.uf2` onto `WATCHBOOT`.
 
 ## Testing
 
-There's no test framework yet. For now:
-- `scripts/ci-local.sh` must pass.
-- Check behaviour changes in the simulator (`emmake make …`, then the
-  browser).
-- Check on the watch only through a `manual-task`.
-
-Issue #15 adds host-compiled unit tests for pure logic (planetary hour and
-zodiac calculations). Once it lands, logic changes use TDD against them, and
-this section and `scripts/ci-local.sh` get updated.
+There's no test framework yet, so `scripts/ci-local.sh` is the gate. What to
+check for each kind of change is in
+[`docs/workflow.md` § Testing](docs/workflow.md#testing). #15 adds
+host-compiled unit tests; update both files when it lands.
