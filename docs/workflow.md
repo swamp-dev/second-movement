@@ -27,7 +27,7 @@ over the open backlog and pauses after each ticket.
 
 ## Per-PR checklist (mandatory)
 
-This restates `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`.
+This adapts `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`; where they differ, this list wins.
 
 1. **Code review.** Run the `code-reviewer` subagent on the diff. If the
    diff touches `*.md`, `docs/` or `.claude/`, also run `docs-reviewer`.
@@ -141,7 +141,9 @@ GitHub issue labelled `manual-task` plus a group label (`devices` for
 anything on the watch). Open it before the PR that creates the need, and
 link it in that PR's Manual follow-ups. Add `priority:high` when the
 merged code is unverified until the task is done. Only the user closes
-these issues.
+these issues. If a label is missing, create it first:
+`gh label create manual-task`, `gh label create devices`,
+`gh label create priority:high`.
 
 ---
 
@@ -152,7 +154,7 @@ these issues.
 | Build, toolchain, adding a face, gotchas | [`../CLAUDE.md`](../CLAUDE.md) |
 | Local CI gate | [`../scripts/ci-local.sh`](../scripts/ci-local.sh) |
 | Hosted CI | [`../.github/workflows/build.yml`](../.github/workflows/build.yml) |
-| Per-PR checklist, admin merge (canonical) | `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md` |
+| Per-PR checklist, admin merge (global default) | `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md` |
 | Default merge authority, sub-agent limits | `~/.dotfiles/.claude/rules/collaboration.md` |
 | Generic end-to-end process | `~/.dotfiles/.claude/rules/end-to-end-process.md` |
 

@@ -21,7 +21,7 @@ if ! command -v arm-none-eabi-gcc >/dev/null || ! command -v emmake >/dev/null; 
   exec nix --extra-experimental-features 'nix-command flakes' develop -c "$self" "$@"
 fi
 
-if [[ -n "$(git submodule status --recursive | grep '^-' || true)" ]]; then
+if [[ -n "$(git submodule status --recursive | { grep '^-' || true; })" ]]; then
   echo "error: submodules not initialized; run: git submodule update --init --recursive" >&2
   exit 1
 fi
@@ -37,6 +37,13 @@ if [[ $# -ge 2 ]]; then displays=("$2"); fi
 
 logs="$(mktemp -d "${TMPDIR:-/tmp}/ci-local.XXXXXX")"
 jobs="$(nproc)"
+
+need() { # need <file...>: fail loudly if a build artifact is missing
+  local f
+  for f in "$@"; do
+    [[ -f "$f" ]] || { echo "FAIL  missing artifact $f" >&2; exit 1; }
+  done
+}
 
 run() { # run <label> <command...>
   local label="$1" log="$logs/$1.log"
@@ -57,11 +64,11 @@ for board in "${boards[@]}"; do
     # BOARD/DISPLAY go on the command line: an X11 DISPLAY in the
     # environment must never leak into make.
     run "firmware-$board-$display" make -j"$jobs" BOARD="$board" DISPLAY="$display"
-    test -f build/firmware.uf2
+    need build/firmware.uf2
     # Serial, like hosted CI: a parallel emscripten build intermittently
     # failed to link (`undefined symbol: free`).
     run "simulator-$board-$display" emmake make BOARD="$board" DISPLAY="$display"
-    test -f build-sim/firmware.html -a -f build-sim/firmware.wasm -a -f build-sim/firmware.js
+    need build-sim/firmware.html build-sim/firmware.wasm build-sim/firmware.js
   done
 done
 

@@ -16,6 +16,7 @@ how a ticket becomes a merged PR. Read it before starting work.
 | `movement_faces.h`, `watch-faces.mk`, `movement_config.h` | Face registration (see [Adding a face](#adding-a-face)) |
 | `watch-library/shared/watch/` | Hardware API (`watch_slcd.h` for the display, `watch_rtc.h`, …) |
 | `lib/` | Shared helpers (`sunriset`, `TOTP`, `base32`, …) |
+| `filesystem/`, `location/` | Stored settings and the shared location editor |
 | `template/` | Face template and the `watch_face.py` generator |
 | `gossamer/`, `littlefs/`, `tinyusb/`, `utz/` | Git submodules. Never edit them. |
 | `legacy/` | Old Movement faces that aren't ported yet. They aren't built. |
@@ -25,7 +26,7 @@ how a ticket becomes a merged PR. Read it before starting work.
 You need `arm-none-eabi-gcc` (firmware), `emcc`/`emmake` (simulator), GNU
 make, and `python3`, which the build uses to run `gossamer/utils/uf2/uf2conv.py`.
 `flake.nix` provides the first three. If `command -v arm-none-eabi-gcc emmake`
-prints nothing, prefix every build command with
+doesn't print two paths, prefix every build command with
 `nix --extra-experimental-features 'nix-command flakes' develop -c`. Each Bash
 call is a new shell, so an interactive `nix develop` (or direnv's
 `use flake`) doesn't carry over. `.devcontainer/` is an alternative.
@@ -89,7 +90,8 @@ a local pass and a hosted pass are separate checks, and both are required.
    adds the `#include` above `// New includes go above this line.` in
    `movement_faces.h`, and the `.c` above `# New watch faces go above this
    line.` in `watch-faces.mk`. The types are `clock`, `complication`, `demo`,
-   `sensor` and `settings`. For an `io` face, add those lines by hand.
+   `sensor` and `settings`. For an `io` face, generate it as `complication`, move both files to
+   `watch-faces/io/`, and fix the path in `watch-faces.mk`.
 2. Add `my_thing_face` to `watch_faces[]` in `movement_config.h`. The
    generator doesn't do this step.
 3. Mind the secondary faces. `MOVEMENT_SECONDARY_FACE_INDEX` is
