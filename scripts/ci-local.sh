@@ -67,7 +67,11 @@ for board in "${boards[@]}"; do
     need build/firmware.uf2
     # Serial, like hosted CI: a parallel emscripten build intermittently
     # failed to link (`undefined symbol: free`).
-    run "simulator-$board-$display" emmake make BOARD="$board" DISPLAY="$display"
+    # -UEMSCRIPTEN: newer emsdk (hosted CI) no longer predefines the legacy
+    # EMSCRIPTEN macro, but the flake's emcc still does. Code must test
+    # __EMSCRIPTEN__.
+    run "simulator-$board-$display" env EMCC_CFLAGS="${EMCC_CFLAGS:-} -UEMSCRIPTEN" \
+      emmake make BOARD="$board" DISPLAY="$display"
     need build-sim/firmware.html build-sim/firmware.wasm build-sim/firmware.js
   done
 done
