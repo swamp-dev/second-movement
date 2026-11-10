@@ -65,9 +65,8 @@ static void _sunrise_sunset_face_update(sunrise_sunset_face_state_t *state) {
     }
 
     watch_date_time_t date_time = movement_get_local_date_time(); // the current local date / time
-    watch_date_time_t utc_now = watch_utility_date_time_convert_zone(date_time, movement_get_current_timezone_offset(), 0); // the current date / time in UTC
     watch_date_time_t scratch_time; // scratchpad, contains different values at different times
-    scratch_time.reg = utc_now.reg;
+    scratch_time.reg = date_time.reg;
 
     // Weird quirky unsigned things were happening when I tried to cast these directly to doubles below.
     // it looks redundant, but extracting them to local int16's seemed to fix it.
@@ -77,13 +76,9 @@ static void _sunrise_sunset_face_update(sunrise_sunset_face_state_t *state) {
     double lat = (double)lat_centi / 100.0;
     double lon = (double)lon_centi / 100.0;
 
-    // sunriset returns the rise/set times as signed decimal hours in UTC.
-    // this can mean hours below 0 or above 31, which won't fit into a watch_date_time_t struct.
-    // to deal with this, we set aside the offset in hours, and add it back before converting it to a watch_date_time_t.
-    double hours_from_utc = ((double)movement_get_current_timezone_offset()) / 3600.0;
-
     // we loop twice because if it's after sunset today, we need to recalculate to display values for tomorrow.
     for(int i = 0; i < 2; i++) {
+        double hours_from_utc = ((double)movement_get_timezone_offset_for_date(scratch_time)) / 3600.0;
         uint8_t result = sun_rise_set(scratch_time.unit.year + WATCH_RTC_REFERENCE_YEAR, scratch_time.unit.month, scratch_time.unit.day, lon, lat, &rise, &set);
 
         if (result != 0) {
@@ -183,7 +178,7 @@ static void _sunrise_sunset_face_update(sunrise_sunset_face_state_t *state) {
         }
 
         // it's after sunset. we need to display sunrise/sunset for tomorrow.
-        uint32_t timestamp = watch_utility_date_time_to_unix_time(utc_now, 0);
+        uint32_t timestamp = watch_utility_date_time_to_unix_time(date_time, 0);
         timestamp += 86400;
         scratch_time = watch_utility_date_time_from_unix_time(timestamp, 0);
     }
