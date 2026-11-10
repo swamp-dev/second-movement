@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "simple_coin_flip_face.h"
+#include "delay.h"
 
 void simple_coin_flip_face_setup(uint8_t watch_face_index, void ** context_ptr) {
     (void) watch_face_index;
