@@ -25,7 +25,7 @@ how a ticket becomes a merged PR. Read it before starting work.
 
 You need `arm-none-eabi-gcc` (firmware), `emcc`/`emmake` (simulator), GNU
 make, and `python3`, which the build uses to run `gossamer/utils/uf2/uf2conv.py`.
-`flake.nix` provides the first three. If `command -v arm-none-eabi-gcc emmake`
+`flake.nix` provides all four. If `command -v arm-none-eabi-gcc emmake`
 doesn't print two paths, prefix every build command with
 `nix --extra-experimental-features 'nix-command flakes' develop -c`. Each Bash
 call is a new shell, so an interactive `nix develop` (or direnv's

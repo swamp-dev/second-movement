@@ -92,6 +92,12 @@ typedef enum {
   LIS2DW_FILTER_HIGH_PASS = 1,
 } lis2dw_filter_t;
 
+typedef enum
+{
+  LIS2DW12_INT_PULSED   = 0,
+  LIS2DW12_INT_LATCHED  = 1,
+} lis2dw12_lir_t;
+
 typedef enum {
   LIS2DW_RANGE_16_G = 0b11, // +/- 16g
   LIS2DW_RANGE_8_G = 0b10,  // +/- 8g
@@ -311,6 +317,8 @@ void lis2dw_set_data_rate(lis2dw_data_rate_t dataRate);
 
 lis2dw_data_rate_t lis2dw_get_data_rate(void);
 
+float lis2dw_get_data_rate_hz(void);
+
 void lis2dw_set_mode(lis2dw_mode_t mode);
 
 lis2dw_mode_t lis2dw_get_mode(void);
@@ -343,6 +351,10 @@ bool lis2dw_read_fifo(lis2dw_fifo_t *fifo_data);
 
 void lis2dw_clear_fifo(void);
 
+void lis2dw_enable_double_tap(void);
+
+void lis2dw_disable_double_tap(void);
+
 void lis2dw_enable_sleep(void);
 
 void lis2dw_disable_sleep(void);
@@ -359,9 +371,17 @@ void lis2dw_configure_wakeup_threshold(uint8_t threshold);
 
 void lis2dw_configure_6d_threshold(uint8_t threshold);
 
+void lis2dw_configure_sleep_duration(uint8_t duration);
+
+void lis2dw_configure_wake_duration(uint8_t duration);
+
 void lis2dw_configure_tap_threshold(uint8_t threshold_x, uint8_t threshold_y, uint8_t threshold_z, uint8_t axes_to_enable);
 
 void lis2dw_configure_tap_duration(uint8_t latency, uint8_t quiet, uint8_t shock);
+
+void lis2dw12_int_notification_set(lis2dw12_lir_t val);
+
+lis2dw12_lir_t lis2dw12_int_notification_get(void);
 
 void lis2dw_configure_int1(uint8_t sources);
 
@@ -371,10 +391,18 @@ void lis2dw_enable_interrupts(void);
 
 void lis2dw_disable_interrupts(void);
 
+void lis2dw_pulsed_drdy_interrupts(void);
+
+void lis2dw_latched_drdy_interrupts(void);
+
 lis2dw_interrupt_source_t lis2dw_get_interrupt_source(void);
 
 lis2dw_wakeup_source_t lis2dw_get_wakeup_source(void);
 
 uint8_t lis2dw_get_wakeup_threshold(void);
+
+uint8_t lis2dw_get_sleep_duration(void);
+
+uint8_t lis2dw_get_wake_duration(void);
 
 #endif // LIS2DW_H

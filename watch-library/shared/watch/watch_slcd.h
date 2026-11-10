@@ -48,8 +48,8 @@
 
 /// An enum listing the icons and indicators available on the watch.
 typedef enum {
-    WATCH_INDICATOR_SIGNAL = 0, ///< The hourly signal indicator; also useful for indicating that sensors are on.
-    WATCH_INDICATOR_BELL,       ///< The small bell indicating that an alarm is set.
+    WATCH_INDICATOR_SIGNAL = 0, ///< The signal indicator indicating alarm is set; also useful for indicating that sensors are on.
+    WATCH_INDICATOR_BELL,       ///< The small bell indicating hourly chime is on.
     WATCH_INDICATOR_PM,         ///< The PM indicator, indicating that a time is in the afternoon.
     WATCH_INDICATOR_24H,        ///< The 24H indicator, indicating that the watch is in a 24-hour mode.
     WATCH_INDICATOR_LAP,        ///< The LAP indicator; the F-91W uses this in its stopwatch UI. On custom LCD it's a looped arrow.
@@ -97,6 +97,10 @@ typedef enum {
   * Call this before attempting to set pixels or display strings.
   */
 void watch_enable_display(void);
+
+/** @brief Disables the Segment LCD display.
+  */
+void watch_disable_display(void);
 
 /** @brief Sets a pixel. Use this to manually set a pixel with a given common and segment number.
   *        See <a href="segmap.html">segmap.html</a>.
