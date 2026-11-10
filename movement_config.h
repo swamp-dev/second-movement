@@ -29,20 +29,21 @@
 
 const watch_face_t watch_faces[] = {
     clock_face,
-    timer_face,
     planetary_hour_face,
-    stopwatch_face,
+    timer_face,
     sunrise_sunset_face,
     moon_phase_face,
-    zodiac_face,
     advanced_alarm_face,
-    wordle_face, // for Andy's watch
-    probability_face, // for Andy's watch
-    /* totp_face, */
-    /* temperature_display_face, */
+    stopwatch_face,
+    zodiac_face,
+    totp_face,
+    temperature_display_face,
     voltage_face,
     settings_face,
-    set_time_face
+    set_time_face,
+    tarot_face,
+    probability_face,
+    wordle_face,
 };
 
 #define MOVEMENT_NUM_FACES (sizeof(watch_faces) / sizeof(watch_face_t))
