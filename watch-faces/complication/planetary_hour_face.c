@@ -104,15 +104,29 @@ static void _planetary_hour_set_expiration(planetary_hour_state_t *state, watch_
     state->hour_offset_expires = _from_unix(timestamp + 60);
 }
 
-static int get_time_since_sunrise_in_hours(watch_date_time_t sunrise_local,
-                                          watch_date_time_t now)
+// Divides [period_start, period_end) into 12 equal planetary hours.
+// Returns which subdivision (0-11) contains target_time,
+// and writes the start/end of that subdivision to the out-params.
+static int _find_planetary_hour_in_period(watch_date_time_t period_start,
+                                          watch_date_time_t period_end,
+                                          watch_date_time_t target_time,
+                                          watch_date_time_t *hour_start_out,
+                                          watch_date_time_t *hour_end_out)
 {
-    uint32_t sunrise_unix = _unix(sunrise_local);
-    uint32_t hour_start_unix = _unix(now);
+    uint32_t ps = _unix(period_start);
+    uint32_t pe = _unix(period_end);
+    uint32_t tt = _unix(target_time);
 
-    // Calculate the time difference in hours
-    double time_since_sunrise = (double)(hour_start_unix - sunrise_unix) / 3600.0;
-    return (int)floor(time_since_sunrise);
+    double hour_duration = (double)(pe - ps) / 12.0;
+    int index = (int)floor((double)(tt - ps) / hour_duration);
+
+    if (index < 0) index = 0;
+    if (index > 11) index = 11;
+
+    *hour_start_out = _from_unix(ps + (uint32_t)(index * hour_duration));
+    *hour_end_out   = _from_unix(ps + (uint32_t)((index + 1) * hour_duration));
+
+    return index;
 }
 
 // this will return an entry from the planet_names map
@@ -419,44 +433,76 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
     double hours_from_utc = ((double)movement_get_current_timezone_offset()) / 3600.0;
 
     // Find the target hour start by advancing hour_offset steps from "current planetary hour"
-
     uint32_t unix_time = _unix(now_local);
     unix_time += state->hour_offset * 3600;
 
     watch_date_time_t target_time = _from_unix(unix_time);
 
-    // Find the start of the current hour
-    unix_time -= (unix_time % 3600);
+    // // Find the start of the current hour
+    // unix_time -= (unix_time % 3600);
 
     // ----- Planetary base selection (your rule; anchored to "now") -----
+
     watch_date_time_t target0 = _midnight_of(target_time);
-    watch_date_time_t sr_target, ss_target;
-    if (!_compute_local_sun_times(target0, lon, lat, hours_from_utc, &sr_target, &ss_target))
+    watch_date_time_t sr_target_day, ss_target_day;
+    if (!_compute_local_sun_times(target0, lon, lat, hours_from_utc, &sr_target_day, &ss_target_day))
     {
         watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "PHour", "PH");
         watch_display_text(WATCH_POSITION_BOTTOM, "None  ");
         return;
     }
 
-    uint32_t ts_now = _unix(target_time);
-    _planetary_hour_set_expiration(state, now_local);
 
-    uint32_t ts_midnight_next = _unix(target0) + 86400;
-    watch_date_time_t yday0 = _add_days(target0, -1);
-    watch_date_time_t sr_yday, ss_yday;
-    _compute_local_sun_times(yday0, lon, lat, hours_from_utc, &sr_yday, &ss_yday);
+    watch_date_time_t period_start, period_end;
+    bool is_night = false;
+    watch_date_time_t base_day = target0; // the day whose ruler we use
 
-    watch_date_time_t base_sunrise =
-        (ts_now >= _unix(sr_target) && ts_now < ts_midnight_next) ? sr_target : sr_yday;
+    uint32_t tt = _unix(target_time);
 
-    int hours_since_sunrise = get_time_since_sunrise_in_hours(base_sunrise, target_time);
-    planet_names_t ruler = planetary_ruler_from_base_and_time(base_sunrise, hours_since_sunrise);
-    // Calculate the display time by adding the hours since sunrise to the base sunrise time
-    uint32_t display_time_unix = _unix(base_sunrise) + (hours_since_sunrise * 3600); // - (hours_since_sunrise * 60); // remove one minute per hour for offset
-    watch_date_time_t display_time = _from_unix(display_time_unix);
-    printf("Base sunrise: %02d:%02d, Hours since sunrise: %d, Ruler: %s\n, display time: %02d:%02d, Day: %d\n",
-           base_sunrise.unit.hour, base_sunrise.unit.minute,
-           hours_since_sunrise, ruler.name, display_time.unit.hour, display_time.unit.minute, display_time.unit.day);
+    if (tt < _unix(sr_target_day)) {
+        // Before sunrise: still in yesterday's night period
+        watch_date_time_t sr_prev_day, ss_prev_day;
+        watch_date_time_t target_neg1 = _add_days(target0, -1);
+        _compute_local_sun_times(target_neg1, lon, lat, hours_from_utc, &sr_prev_day, &ss_prev_day);
+        period_start = ss_prev_day;
+        period_end = sr_target_day;
+        is_night = true;
+        base_day = target_neg1; // yesterday's ruler
+    } else if (tt >= _unix(ss_target_day)) {
+        // After sunset: tonight's period
+        watch_date_time_t sr_next_day, ss_next_day;
+        watch_date_time_t target1 = _add_days(target0, 1);
+        _compute_local_sun_times(target1, lon, lat, hours_from_utc, &sr_next_day, &ss_next_day);
+        period_start = ss_target_day;
+        period_end = sr_next_day;
+        is_night = true;
+        base_day = target0; // today's ruler
+    } else {
+        // Between sunrise and sunset: daytime
+        period_start = sr_target_day;
+        period_end = ss_target_day;
+        is_night = false;
+        base_day = target0; // today's ruler
+    }
+
+    // Divide the period into 12 equal planetary hours
+    watch_date_time_t hour_start, hour_end;
+    int hour_index = _find_planetary_hour_in_period(period_start, period_end, target_time,
+                                                     &hour_start, &hour_end);
+
+    // Night hours are hours 13-24 of the planetary day (offset by 12)
+    int chaldean_offset = hour_index + (is_night ? 12 : 0);
+
+    planet_names_t ruler = planetary_ruler_from_base_and_time(base_day, chaldean_offset);
+    watch_date_time_t display_time = hour_start;
+
+    _planetary_hour_set_expiration(state, hour_end);
+
+    printf("Period: %02d:%02d-%02d:%02d, Hour: %d, Night: %d, Ruler: %s, Display: %02d:%02d\n",
+           period_start.unit.hour, period_start.unit.minute,
+           period_end.unit.hour, period_end.unit.minute,
+           hour_index, is_night, ruler.name,
+           display_time.unit.hour, display_time.unit.minute);
 
     // ---- DISPLAY ----
     watch_set_colon();

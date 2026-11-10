@@ -11,6 +11,8 @@ static const struct {
     int8_t start_day;
     const char *abbreviation;
 } zodiac_signs[] = {
+    {"Aquar", 1, 20, "AQ"},
+    {"Pisce", 2, 19, "PI"},
     {"Aries", 3, 21, "AR"},
     {"Tauru", 4, 20, "TA"},
     {"Gemin", 5, 21, "GE"},
@@ -21,8 +23,6 @@ static const struct {
     {"Scorp", 10, 23, "SC"},
     {"Sagit", 11, 22, "SA"},
     {"Capri", 12, 22, "CA"},
-    {"Aquar", 1, 20, "AQ"},
-    {"Pisce", 2, 19, "PI"},
 };
 
 #define ZODIAC_SIGN_COUNT (sizeof(zodiac_signs) / sizeof(zodiac_signs[0]))
@@ -42,8 +42,8 @@ static int8_t get_current_zodiac_sign(void) {
         }
     }
 
-    // If no match is found, default to the first zodiac sign (Aries)
-    return -1;
+    // Date is past the last sign's start — return the last sign (Capricorn)
+    return ZODIAC_SIGN_COUNT - 1;
 }
 
 void zodiac_face_setup(uint8_t watch_face_index, void **context_ptr) {
@@ -72,7 +72,7 @@ void zodiac_face_activate(void *context) {
     uint8_t start_month = zodiac_signs[state->current_sign_index].start_month;
     uint8_t start_day = zodiac_signs[state->current_sign_index].start_day;
 
-    char bottom[7];
+    char bottom[9];
     snprintf(bottom, sizeof(bottom), "%02u%02uSt", start_month, start_day);
 
     watch_display_text_with_fallback(WATCH_POSITION_TOP, current_sign, zodiac_signs[state->current_sign_index].abbreviation);
