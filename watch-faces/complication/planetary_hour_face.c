@@ -253,17 +253,21 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
     int32_t utc_offset = movement_get_current_timezone_offset();
 
     // The planetary hour containing the time hour_offset clock hours from now.
-    int64_t target = (int64_t)movement_get_utc_timestamp() + (int64_t)state->hour_offset * 3600;
+    int64_t now = (int64_t)movement_get_utc_timestamp();
+    int64_t target = now + (int64_t)state->hour_offset * 3600;
     planetary_hour_t hour;
     if (!planetary_hour_at(target, utc_offset, lat, lon, &hour))
     {
+        // Polar day or night lasts days, so retry hourly instead of on every tick.
+        state->hour_offset_expires = watch_utility_date_time_from_unix_time((uint32_t)(now + 3600), utc_offset);
         watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "PHour", "PH");
         watch_display_text(WATCH_POSITION_BOTTOM, "None  ");
         return;
     }
 
     planetary_planet_t ruler = planetary_planets[hour.ruler];
-    watch_date_time_t display_time = watch_utility_date_time_from_unix_time((uint32_t)hour.start, utc_offset);
+    // Shown to the nearest minute, as sunrise_sunset_face rounds sunrise.
+    watch_date_time_t display_time = watch_utility_date_time_from_unix_time((uint32_t)(hour.start + 30), utc_offset);
     state->hour_offset_expires = watch_utility_date_time_from_unix_time((uint32_t)(hour.end + 60), utc_offset);
 
     // ---- DISPLAY ----

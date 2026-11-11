@@ -55,7 +55,9 @@ typedef struct {
 // The planetary hour containing the instant `now` (Unix time, UTC) at the given
 // latitude and longitude (degrees, north and east positive). `utc_offset` is
 // the local offset from UTC in seconds and only decides which calendar day,
-// and so which weekday, a sunrise belongs to.
+// and so which weekday, a sunrise belongs to. With an offset far from the
+// location's solar time (sunrise near local midnight), that local date can
+// repeat or skip a day, and the ruler sequence jumps there.
 // Returns false, leaving *out unchanged, when there is no sunrise or no sunset
 // close enough to `now` (polar day or polar night).
 bool planetary_hour_at(int64_t now, int32_t utc_offset, double latitude, double longitude,
