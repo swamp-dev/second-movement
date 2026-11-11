@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2025 Your Name
+ * Copyright (c) 2025 second-movement contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -30,8 +30,6 @@
 #include "planetary.h"
 
 typedef struct {
-    uint8_t current_planetary_hour;
-    uint8_t current_zodiac_sign;
     uint8_t longLatToUse;            
     int16_t hour_offset;   // planetary hours from the current one: 0 = current, +1 = next, -1 = previous, etc.
     bool shown_valid;      // `shown` holds the planetary hour on the display
