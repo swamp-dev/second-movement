@@ -219,9 +219,8 @@ bool filesystem_read_line(char *filename, char *buf, int32_t *offset, int32_t le
     if (file_size > 0) {
         int err = lfs_file_open(&eeprom_filesystem, &file, filename, LFS_O_RDONLY);
         if (err < 0) return false;
-        lfs_ssize_t read = lfs_file_seek(&eeprom_filesystem, &file, *offset, LFS_SEEK_SET);
-        if (read >= 0)
-            read = lfs_file_read(&eeprom_filesystem, &file, buf, min(length - 1, file_size - *offset));
+        lfs_soff_t pos = lfs_file_seek(&eeprom_filesystem, &file, *offset, LFS_SEEK_SET);
+        lfs_ssize_t read = pos < 0 ? pos : lfs_file_read(&eeprom_filesystem, &file, buf, min(length - 1, file_size - *offset));
         // Close on every path: `file` is shared, and littlefs can't reopen it while it's open.
         err = lfs_file_close(&eeprom_filesystem, &file);
         if (read < 0 || err != LFS_ERR_OK) return false;
@@ -261,6 +260,10 @@ static void filesystem_cat(char *filename) {
 // failed write keeps the old contents, and it must still happen: `file` is
 // shared, and littlefs can't reopen it while it's open.
 static bool _filesystem_write(char *filename, int flags, char *text, int32_t length) {
+    // littlefs takes the length as unsigned and refuses a wrapped one with
+    // LFS_ERR_FBIG without marking the file errored, so the close would commit
+    // the truncation.
+    if (length < 0) return false;
     if (filesystem_get_free_space() <= 256) {
         printf("No free space!\n");
         return false;
