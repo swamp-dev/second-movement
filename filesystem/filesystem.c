@@ -36,6 +36,7 @@
 #define min(x, y) ((x) > (y) ? (y) : (x))
 #endif
 
+// littlefs block-device callbacks: 0 on success, a negative lfs_error on failure.
 int lfs_storage_read(const struct lfs_config *cfg, lfs_block_t block, lfs_off_t off, void *buffer, lfs_size_t size);
 int lfs_storage_prog(const struct lfs_config *cfg, lfs_block_t block, lfs_off_t off, const void *buffer, lfs_size_t size);
 int lfs_storage_erase(const struct lfs_config *cfg, lfs_block_t block);
@@ -43,22 +44,22 @@ int lfs_storage_sync(const struct lfs_config *cfg);
 
 int lfs_storage_read(const struct lfs_config *cfg, lfs_block_t block, lfs_off_t off, void *buffer, lfs_size_t size) {
     (void) cfg;
-    return !watch_storage_read(block, off, (void *)buffer, size);
+    return watch_storage_read(block, off, (void *)buffer, size) ? LFS_ERR_OK : LFS_ERR_IO;
 }
 
 int lfs_storage_prog(const struct lfs_config *cfg, lfs_block_t block, lfs_off_t off, const void *buffer, lfs_size_t size) {
     (void) cfg;
-    return !watch_storage_write(block, off, (void *)buffer, size);
+    return watch_storage_write(block, off, (void *)buffer, size) ? LFS_ERR_OK : LFS_ERR_IO;
 }
 
 int lfs_storage_erase(const struct lfs_config *cfg, lfs_block_t block) {
     (void) cfg;
-    return !watch_storage_erase(block);
+    return watch_storage_erase(block) ? LFS_ERR_OK : LFS_ERR_IO;
 }
 
 int lfs_storage_sync(const struct lfs_config *cfg) {
     (void) cfg;
-    return !watch_storage_sync();
+    return watch_storage_sync() ? LFS_ERR_OK : LFS_ERR_IO;
 }
 
 const struct lfs_config watch_lfs_cfg = {
