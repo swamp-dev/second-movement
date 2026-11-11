@@ -32,11 +32,11 @@
  * adult, and gets hungry, bored and tired as real time passes, whether or
  * not this face is showing. Ignore it for too long and it dies.
  *
- * The top line is its mood (HAPPY, OKAY, HUNGr, tIrEd, SAd, SLEEP, EGG, RIP).
+ * The top line is its mood (HAPPY, COOL, HUNGr, tIrEd, SAd, SLEEP, EGG, RIP).
  * The bell indicator means a stat is critical; the sleep indicator means the
  * pet is asleep.
  *
- * LIGHT        next action: FEEd, PLAY, LIGHtS (bedtime / wake up), StAtUS
+ * LIGHT        next action: FEEd, PLAY, bEd (GEt UP while asleep), StAtUS
  * ALARM        do it. The bottom line then shows the stat it changed, or
  *              "no" if the pet won't (full, too tired, asleep...). On StAtUS,
  *              each press shows the next of Fd, HA, En (0-100) and the life

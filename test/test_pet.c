@@ -323,7 +323,7 @@ static void test_render_moods(void) {
     pet = baby();
     CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "HAPPY", "HA", "FEEd  ");
     pet.happiness = PET_STAT_CONTENT - 1;
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "OKAY ", "OK", "FEEd  ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "COOL ", "CO", "FEEd  ");
     pet.happiness = PET_STAT_CRITICAL;
     CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SAd  ", "SA", "FEEd  ");
     pet.energy = PET_STAT_CRITICAL;
@@ -344,7 +344,10 @@ static void test_render_bottom_line(void) {
     pet.energy = 42;
     CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SAd  ", "SA", "FEEd  ");
     CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_ACTION, "SAd  ", "SA", "PLAY  ");
-    CHECK_SCREEN(&pet, PET_ACTION_LIGHTS, PET_PAGE_ACTION, "SAd  ", "SA", "LIGHtS");
+    CHECK_SCREEN(&pet, PET_ACTION_LIGHTS, PET_PAGE_ACTION, "SAd  ", "SA", "bEd   ");
+    pet.asleep = true; // the lights action names what it would do now
+    CHECK_SCREEN(&pet, PET_ACTION_LIGHTS, PET_PAGE_ACTION, "SLEEP", "SL", "GEt UP");
+    pet.asleep = false;
     CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_ACTION, "SAd  ", "SA", "StAtUS");
     CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_FULLNESS, "SAd  ", "SA", "Fd 100");
     CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_HAPPINESS, "SAd  ", "SA", "HA   7");

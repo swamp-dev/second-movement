@@ -162,7 +162,8 @@ static void set_mood(pet_screen_t *screen, const char *top, const char *fallback
 }
 
 void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, pet_screen_t *screen) {
-    static const char *const action_names[PET_ACTION_COUNT] = {"FEEd  ", "PLAY  ", "LIGHtS", "StAtUS"};
+    // Only letters a 7-segment digit draws well: no I, K, M, V, W or X.
+    static const char *const action_names[PET_ACTION_COUNT] = {"FEEd  ", "PLAY  ", "bEd   ", "StAtUS"};
     static const char *const stage_names[] = {"EGG", "bAb", "AdU", "AGE"};
     const bool alive = is_hatched_and_alive(pet);
     const uint32_t age_days = pet->age_minutes / (24 * 60);
@@ -177,7 +178,7 @@ void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, pe
     else if (pet->energy <= PET_STAT_CRITICAL) set_mood(screen, "tIrEd", "tI");
     else if (pet->happiness <= PET_STAT_CRITICAL) set_mood(screen, "SAd  ", "SA");
     else if (pet->fullness >= PET_STAT_CONTENT && pet->happiness >= PET_STAT_CONTENT && pet->energy >= PET_STAT_CONTENT) set_mood(screen, "HAPPY", "HA");
-    else set_mood(screen, "OKAY ", "OK");
+    else set_mood(screen, "COOL ", "CO");
 
     strcpy(screen->bottom, "      ");
     if (page == PET_PAGE_DOZE) return;
@@ -188,7 +189,8 @@ void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, pe
     }
     switch (page) {
         case PET_PAGE_ACTION:
-            if ((unsigned)action < PET_ACTION_COUNT) strcpy(screen->bottom, action_names[action]);
+            if (action == PET_ACTION_LIGHTS && pet->asleep) strcpy(screen->bottom, "GEt UP");
+            else if ((unsigned)action < PET_ACTION_COUNT) strcpy(screen->bottom, action_names[action]);
             break;
         case PET_PAGE_FULLNESS:
             label_and_value(screen->bottom, "Fd", pet->fullness);
