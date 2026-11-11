@@ -41,13 +41,23 @@ extern lfs_t eeprom_filesystem;
 // Larger than a littlefs inline file, so a write programs flash blocks.
 #define BIG 300
 
+static bool mounted;
+
+// Each test mounts its own filesystem; unmount frees littlefs's buffers.
+static void unmount(void) {
+    if (mounted) lfs_unmount(&eeprom_filesystem);
+    mounted = false;
+}
+
 static void fresh_filesystem(void) {
+    unmount();
     memset(flash, 0xff, sizeof(flash));
     fail_progs = false;
     // Not CHECKed: after formatting a blank flash, filesystem_init() returns
     // false even though the mount worked (its only caller ignores the result).
     // The writes and reads below fail if the filesystem isn't usable.
     filesystem_init();
+    mounted = true;
 }
 
 static void fill(char *buf, char c) {
@@ -106,5 +116,6 @@ int main(void) {
     alarm(10);
     test_failed_write_keeps_old_contents();
     test_failed_append_keeps_old_contents();
+    unmount();
     return check_summary("test_filesystem");
 }
