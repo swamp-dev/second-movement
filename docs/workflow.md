@@ -17,7 +17,7 @@ Build, toolchain and face-registration details are in
 | 1 | Worktree and branch off the latest `origin/main`, then read the ticket in full and claim it | `/start-ticket <N>` |
 | 2 | Implement it (see [Testing](#testing)) | manual |
 | 3 | Run the per-PR checklist below, then open the PR | `/finish-ticket` |
-| 4 | Wait for hosted CI to go green: every `build` and `build-simulator` job of the `Build` workflow, for both the push run and the pull_request run | `gh pr checks <P>` |
+| 4 | Wait for hosted CI to go green: the `host-tests` job and every `build` and `build-simulator` job of the `Build` workflow, for both the push run and the pull_request run | `gh pr checks <P>` |
 | 5 | Merge and clean up, or hand the PR to the user (see [Merge authority](#merge-authority)) | `/ship-ticket <P>` |
 
 Do the steps in order and don't skip any. `/full-send` loops steps 1–5
@@ -33,8 +33,8 @@ This adapts `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`; where they 
    diff touches `*.md`, `docs/` or `.claude/`, also run `docs-reviewer`.
 2. **Address findings.** Fix every critical and significant finding. List
    any minor ones you don't fix in the PR body.
-3. **Run all CI jobs locally:** `scripts/ci-local.sh`, which builds the
-   firmware and simulator for every board × display. Every combination
+3. **Run all CI jobs locally:** `scripts/ci-local.sh`, which runs the host
+   unit tests and builds the firmware and simulator for every board × display. Every combination
    must pass, and a single-combination run doesn't count.
 4. **Apply fixes** for any local failure. If a fix touches behaviour the
    review didn't cover, restart from step 1.
@@ -64,9 +64,10 @@ current head or hand the PR to the user.
 ## Testing
 
 - **Pure logic** (time, astronomy, zodiac, packing and unpacking): TDD with
-  host-compiled unit tests once #15 adds the harness. Until then, write the
-  logic so it's testable (a pure function with no `watch_*` calls) and say
-  in the PR that tests are pending #15.
+  host unit tests (`make -C test`; how to add one is in `CLAUDE.md` §
+  Testing). Put the logic in a pure function with no `watch_*` or
+  `movement_*` calls, write a failing test, and commit the test before the
+  implementation.
 - **Display, buttons and face flow:** check in the simulator
   (`emmake make …`, see `CLAUDE.md`) and describe what you checked in the
   PR. If you can't drive a browser, say so in the Test plan and leave the
