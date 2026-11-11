@@ -24,7 +24,7 @@ test: $(addprefix build/,$(TESTS))
 .SECONDEXPANSION:
 # Any header in test/ or lib/ triggers a rebuild, so a header-only change is never
 # tested against a stale binary.
-HEADERS := $(wildcard *.h stubs/*.h ../lib/*/*.h ../filesystem/*.h)
+HEADERS := $(wildcard *.h stubs/*.h ../lib/*/*.h ../filesystem/*.h ../littlefs/*.h)
 
 build/%: $$($$*_SRCS) $(HEADERS)
 	@mkdir -p build
