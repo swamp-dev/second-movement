@@ -29,19 +29,24 @@ over the open backlog and pauses after each ticket.
 
 This adapts `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`; where they differ, this list wins.
 
-1. **Tests for the logic.** Every change to behaviour comes with host unit
-   tests for its logic in the same PR (see [Testing](#testing)). If the
-   logic sits in a face, move it into a pure function in `lib/` so it can be
-   tested. A fix for a bug in that logic starts with a test that fails,
-   committed before the fix. Only the wiring left in the face (`watch_*` and
-   `movement_*` calls) may go without a host test, and the Test plan says
-   what was left untested and why.
-2. **Simulator check.** Every change to a face, or to code a face uses,
-   is checked in the simulator before the PR opens: drive the screens and
-   buttons the change affects, and record the steps and what you saw in the
-   Test plan. If you can't drive a browser, say so and open a `manual-task`
-   issue for the check. Changes that no face uses (CI, docs, tests only)
-   say "Simulator: N/A" and why.
+1. **Tests for the logic.** Every change to non-trivial logic (arithmetic,
+   time and astronomy, branching on data, packing and unpacking, when a face
+   refreshes) comes with host unit tests in the same PR (see
+   [Testing](#testing)). If that logic sits in a face, move it into a pure
+   function in `lib/` first. A fix for a bug in that logic starts with a
+   test that fails, committed before the fix; push it together with the fix,
+   since CI judges only the head. Display text and button-to-screen flow
+   need no host test: item 2 covers them, and the Test plan says so. Changes
+   with no logic change (docs, CI, comments, renames) record "Tests: N/A"
+   and why.
+2. **Simulator check.** Every change under `watch-faces/`, to
+   `movement*.{c,h}`, or to `lib/`, `filesystem/` or `location/` code a
+   built face calls is checked in the simulator before the PR opens. Drive
+   the screens and buttons the change affects (for shared code, a face
+   that calls it, named), and record the steps and what you saw in the Test
+   plan. Build-system, CI, docs and test-only changes record
+   "Simulator: N/A". An agent should always be able to do this check; if it
+   can't, open a `manual-task` issue for it and link it from the Test plan.
 3. **Code review.** Run the `code-reviewer` subagent on the diff. If the
    diff touches `*.md`, `docs/` or `.claude/`, also run `docs-reviewer`.
 4. **Address findings.** Fix every critical and significant finding. If a
@@ -52,7 +57,8 @@ This adapts `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`; where they 
    display. Every combination must pass, and a single-combination run
    doesn't count.
 6. **Apply fixes** for any local failure. If a fix touches behaviour the
-   review didn't cover, restart from step 1.
+   review didn't cover, restart from step 3, and redo steps 1 and 2 if the
+   fix changes behaviour.
 7. **Re-review when the fixes were substantial**, meaning any of:
    - new files since the first review;
    - more than 50 net lines added since then;
@@ -61,8 +67,8 @@ This adapts `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`; where they 
    - a fix in an area the first review flagged as critical or significant.
 
 The PR body records what ran under a **Per-PR checklist** heading:
-- the tests added, and the SHA of the failing-test commit for a bug fix
-  (what was left untested goes in the Test plan);
+- the tests added (or N/A), and the SHA of the failing-test commit for a
+  bug fix (what was left untested goes in the Test plan);
 - the simulator check: done (steps in the Test plan), N/A, or the
   `manual-task` issue;
 - which reviewers ran (`code-reviewer`, plus `docs-reviewer` when
@@ -74,10 +80,12 @@ Update that section every time you push a new head.
 
 This repo has no stamp file. Instead of asking the user, `/ship-ticket`
 step 3 checks it itself: merge only if **this session** confirmed item 1
-(the tests exist, and the failing-test SHA is recorded for a bug fix), ran
-items 2–7, and the recorded SHA equals the PR's `headRefOid`. If not (for
-example, a new session after `/handoff` or `/resume`), re-run the checklist
-on the current head or hand the PR to the user.
+(the tests exist or N/A is recorded, and the failing-test SHA is recorded
+for a bug fix), ran items 2–7, and the recorded SHA equals the PR's
+`headRefOid`. If not (for example, a new session after `/handoff` or
+`/resume`), re-run the checklist on the current head, including a fresh
+simulator check (reading the old Test plan doesn't count), or hand the PR
+to the user.
 
 ---
 
@@ -114,8 +122,10 @@ the user merges. **This repo relaxes that.** The agent may merge through
 These PRs always go to the user to merge, even when every condition holds:
 
 - **Gate-introducing PRs:** changes to this doc, `CLAUDE.md`'s CI commands
-  or Testing sections, `scripts/ci-local.sh`, `test/Makefile`,
-  `test/check.h`, anything under `.claude/`, or `.github/workflows/`.
+  or Testing sections, `scripts/ci-local.sh`, `test/check.h`,
+  `test/Makefile` (except adding a `test_<name>` to `TESTS` with its
+  `test_<name>_SRCS`, or a `-I../lib/<dir>` line, which are routine),
+  anything under `.claude/`, or `.github/workflows/`.
 - Submodule pointer bumps (`gossamer`, `littlefs`, `tinyusb`, `utz`).
 - Upstream syncs from `joeycastillo/second-movement`.
 
@@ -147,7 +157,8 @@ user decides.
   scope is usually the face (`fix(zodiac_face): …`). Put failing-test
   commits before implementation commits.
 - **PR:** Conventional-Commit title, `Closes #N` on its own line in the
-  body, and the Per-PR checklist section.
+  body, a **Test plan** section (tests, simulator steps, anything left
+  untested), the Per-PR checklist section, and Manual follow-ups.
 - **`KnightConfig`** is the owner's personal build branch. Agents never
   push to it, rebase it, or open PRs against it.
 
