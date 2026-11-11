@@ -97,10 +97,10 @@ and a hosted pass are separate checks, and both are required.
 2. Add `my_thing_face` to `watch_faces[]` in `movement_config.h`. The
    generator doesn't do this step.
 3. Mind the secondary faces. `MOVEMENT_SECONDARY_FACE_INDEX` is
-   `MOVEMENT_NUM_FACES - 5`, so the **last 5 entries** in `watch_faces[]`
+   `MOVEMENT_NUM_FACES - 6`, so the **last 6 entries** in `watch_faces[]`
    are left out of the normal MODE rotation. They're reached by
    long-pressing MODE on the first face. Insert a regular face before those
-   five.
+   six.
 4. Build with `scripts/ci-local.sh sensorwatch_red custom`. If the link fails
    with "region `flash' overflowed", remove a face from `watch_faces[]`.
 
