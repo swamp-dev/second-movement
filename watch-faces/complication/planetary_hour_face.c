@@ -301,8 +301,9 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
     if (!_planetary_hour_face_location(state, &lat, &lon))
     {
         state->shown_valid = false;
-        // Only the location editor and preset switch can change this, and both
-        // call this function, so ticks need not re-read the location.
+        // Activate, the location editor and the preset switch are the only ways
+        // the location can change, and all of them call this function, so ticks
+        // need not re-read it.
         state->refresh_at = UINT32_MAX;
         _planetary_hour_face_display_message("No LOC", "No Loc");
         return;
@@ -315,14 +316,13 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
     int64_t changes_at = now + 3600;
     state->shown_valid = planetary_hour_from_now(now, state->hour_offset, utc_offset, lat, lon,
                                                  &state->shown, &changes_at);
+    state->refresh_at = (uint32_t)changes_at;
     if (!state->shown_valid)
     {
-        state->refresh_at = (uint32_t)changes_at;
         _planetary_hour_face_display_message("None  ", "None  ");
         return;
     }
 
-    state->refresh_at = (uint32_t)changes_at;
     _planetary_hour_face_display(&state->shown, utc_offset);
 }
 
