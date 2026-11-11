@@ -41,10 +41,9 @@ static void _save(pet_face_state_t *state) {
 }
 
 // Brings the pet up to the present and saves it if enough has changed.
-static bool _catch_up(pet_face_state_t *state) {
-    bool advanced = pet_advance_to(&state->pet, movement_get_utc_timestamp());
+static void _catch_up(pet_face_state_t *state) {
+    pet_advance_to(&state->pet, movement_get_utc_timestamp());
     if (pet_should_save(&state->saved, &state->pet)) _save(state);
-    return advanced;
 }
 
 static void _lay_egg(pet_face_state_t *state) {
@@ -58,6 +57,7 @@ static void _lay_egg(pet_face_state_t *state) {
 static void _draw(pet_face_state_t *state) {
     pet_screen_t screen;
     pet_render(&state->pet, (pet_action_t)state->action, (pet_page_t)state->page, &screen);
+    state->drawn_age = state->pet.age_minutes;
 
     watch_display_text_with_fallback(WATCH_POSITION_TOP, screen.top, screen.top_fallback);
     watch_display_text(WATCH_POSITION_BOTTOM, screen.bottom);
@@ -108,7 +108,11 @@ bool pet_face_loop(movement_event_t event, void *context) {
             break;
 
         case EVENT_TICK:
-            if (_catch_up(state)) _draw(state);
+            _catch_up(state);
+            // Redraw when the pet has lived a minute since the last draw. The
+            // minute may have been counted by pet_face_advise rather than
+            // here, so compare ages instead of trusting this catch-up.
+            if (state->pet.age_minutes != state->drawn_age) _draw(state);
             break;
 
         case EVENT_LOW_ENERGY_UPDATE:

@@ -529,6 +529,17 @@ static void test_should_save(void) {
     pet = saved;
     pet_advance_to(&pet, T0 - 1); // clock went backward: keep the new anchor
     CHECK(pet_should_save(&saved, &pet));
+
+    // Nothing about a dead pet changes with time, so once its death is on
+    // file it is never written again.
+    pet_state_t dead = saved;
+    dead.stage = PET_STAGE_DEAD;
+    CHECK(pet_should_save(&saved, &dead));
+    pet = dead;
+    pet_advance_to(&pet, T0 + 10 * PET_SAVE_INTERVAL_SECONDS);
+    CHECK(!pet_should_save(&dead, &pet));
+    pet_advance_to(&pet, T0 - 1);
+    CHECK(!pet_should_save(&dead, &pet));
 }
 
 int main(void) {

@@ -37,7 +37,9 @@
  * The top line is its mood (HAPPY, COOL, HUNGr, tIrEd, SAd, SLEEP, EGG, RIP;
  * on the classic LCD the first two letters, and O for the egg). The bell
  * indicator means a stat is critical; the sleep indicator (custom LCD only)
- * means the pet is asleep. In low-energy mode the face reads SLEEP.
+ * means the pet is asleep. In low-energy mode the top line reads SLEEP (EGG
+ * or RIP if that's the pet), the bottom line is blank and the sleep
+ * animation runs.
  *
  * LIGHT        next action: FEEd, PLAY, bEd (GEt UP while asleep), StAtUS
  * ALARM        do it. The bottom line then shows the stat it changed (after
@@ -58,10 +60,11 @@
 
 typedef struct {
     pet_state_t pet;
-    pet_state_t saved; // the pet as last written to the save file
-    bool has_pet;      // false until a save was loaded or the first egg was laid
-    uint8_t action;    // pet_action_t selected with LIGHT
-    uint8_t page;      // pet_page_t on the bottom line
+    pet_state_t saved;  // the pet as last written to the save file
+    uint32_t drawn_age; // the pet's age_minutes when the screen was last drawn
+    bool has_pet;       // false until a save was loaded or the first egg was laid
+    uint8_t action;     // pet_action_t selected with LIGHT
+    uint8_t page;       // pet_page_t on the bottom line
 } pet_face_state_t;
 
 void pet_face_setup(uint8_t watch_face_index, void **context_ptr);

@@ -257,6 +257,7 @@ bool pet_deserialize(const uint8_t *buf, size_t length, pet_state_t *pet) {
 
 bool pet_should_save(const pet_state_t *saved, const pet_state_t *pet) {
     if (pet->stage != saved->stage || pet->asleep != saved->asleep) return true;
+    if (pet->stage == PET_STAGE_DEAD) return false;
     if (pet->last_update < saved->last_update) return true;
     return pet->last_update - saved->last_update >= PET_SAVE_INTERVAL_SECONDS;
 }

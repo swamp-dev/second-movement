@@ -169,8 +169,8 @@ bool pet_deserialize(const uint8_t *buf, size_t length, pet_state_t *pet);
 
 // True when `pet` should be written out, given the copy last saved: its
 // stage or sleep changed, the clock went backward, or
-// PET_SAVE_INTERVAL_SECONDS have passed. (Save after every applied action
-// too; that one is the caller's job.)
+// PET_SAVE_INTERVAL_SECONDS have passed. A dead pet is saved once, at death.
+// (Save after every applied action too; that one is the caller's job.)
 bool pet_should_save(const pet_state_t *saved, const pet_state_t *pet);
 
 #endif // PET_H_
