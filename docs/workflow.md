@@ -16,7 +16,7 @@ Build, toolchain and face-registration details are in
 |---|---|---|
 | 1 | Worktree and branch off the latest `origin/main`, then read the ticket in full and claim it | `/start-ticket <N>` |
 | 2 | Implement it (see [Testing](#testing)) | manual |
-| 3 | Run the per-PR checklist below, then open the PR | `/finish-ticket` |
+| 3 | Run the per-PR checklist below (`/finish-ticket` doesn't cover its first two items), then open the PR | `/finish-ticket` |
 | 4 | Wait for hosted CI to go green: the `host-tests` job and every `build` and `build-simulator` job of the `Build` workflow, for both the push run and the pull_request run | `gh pr checks <P>` |
 | 5 | Merge and clean up, or hand the PR to the user (see [Merge authority](#merge-authority)) | `/ship-ticket <P>` |
 
@@ -30,12 +30,12 @@ over the open backlog and pauses after each ticket.
 This adapts `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`; where they differ, this list wins.
 
 1. **Tests for the logic.** Every change to behaviour comes with host unit
-   tests for its logic in the same PR (see [Testing](#testing)). A bug fix
-   starts with a test that fails, committed before the fix; give that
-   commit's SHA in the PR. If the logic sits in a face, move it into a pure
-   function in `lib/` so it can be tested. Only the wiring left in the face
-   (`watch_*` and `movement_*` calls) may go without a host test, and the
-   Test plan says what was left untested and why.
+   tests for its logic in the same PR (see [Testing](#testing)). If the
+   logic sits in a face, move it into a pure function in `lib/` so it can be
+   tested. A fix for a bug in that logic starts with a test that fails,
+   committed before the fix. Only the wiring left in the face (`watch_*` and
+   `movement_*` calls) may go without a host test, and the Test plan says
+   what was left untested and why.
 2. **Simulator check.** Every change to a face, or to code a face uses,
    is checked in the simulator before the PR opens: drive the screens and
    buttons the change affects, and record the steps and what you saw in the
@@ -44,8 +44,9 @@ This adapts `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`; where they 
    say "Simulator: N/A" and why.
 3. **Code review.** Run the `code-reviewer` subagent on the diff. If the
    diff touches `*.md`, `docs/` or `.claude/`, also run `docs-reviewer`.
-4. **Address findings.** Fix every critical and significant finding. List
-   any minor ones you don't fix in the PR body.
+4. **Address findings.** Fix every critical and significant finding. If a
+   fix changes behaviour, redo steps 1 and 2 for it. List any minor ones you
+   don't fix in the PR body.
 5. **Run all CI jobs locally:** `scripts/ci-local.sh`, which runs the host
    unit tests and builds the firmware and simulator for every board ×
    display. Every combination must pass, and a single-combination run
@@ -60,8 +61,10 @@ This adapts `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`; where they 
    - a fix in an area the first review flagged as critical or significant.
 
 The PR body records what ran under a **Per-PR checklist** heading:
-- the tests added, and the SHA of the failing-test commit for a bug fix;
-- the simulator check (or N/A, or the `manual-task` issue);
+- the tests added, and the SHA of the failing-test commit for a bug fix
+  (what was left untested goes in the Test plan);
+- the simulator check: done (steps in the Test plan), N/A, or the
+  `manual-task` issue;
 - which reviewers ran (`code-reviewer`, plus `docs-reviewer` when
   triggered) and which findings were addressed;
 - `scripts/ci-local.sh` (full matrix): `all combinations passed` at
@@ -70,8 +73,9 @@ The PR body records what ran under a **Per-PR checklist** heading:
 Update that section every time you push a new head.
 
 This repo has no stamp file. Instead of asking the user, `/ship-ticket`
-step 3 checks it itself: merge only if **this session** ran every item above
-and the recorded SHA equals the PR's `headRefOid`. If not (for example, a
+step 3 checks it itself: merge only if **this session** confirmed item 1
+(the tests exist, and the failing-test SHA is recorded for a bug fix), ran
+items 2–7, and the recorded SHA equals the PR's `headRefOid`. If not (for example, a
 new session after `/handoff` or `/resume`), re-run the checklist on the
 current head or hand the PR to the user.
 
@@ -79,14 +83,13 @@ current head or hand the PR to the user.
 
 ## Testing
 
-- **Pure logic** (time, astronomy, zodiac, packing and unpacking,
-  refresh and expiry decisions): TDD with host unit tests (`make -C test`; how to add one is in
-  [`CLAUDE.md` § Testing](../CLAUDE.md#testing)). Put the logic in a pure
+- **Pure logic** (time, astronomy, zodiac, packing and unpacking, when a
+  face should refresh): TDD with host unit tests (`make -C test`; how to add
+  one is in [`CLAUDE.md` § Testing](../CLAUDE.md#testing)). Put the logic in a pure
   function with no `watch_*` or `movement_*` calls.
-- **Display, buttons and face flow:** always check in the simulator
-  (`emmake make …`, see `CLAUDE.md`), including for fixes whose logic is
-  host-tested, and describe what you checked in the PR. If you can't drive a browser, say so in the Test plan and leave the
-  check to the user in a `manual-task` issue.
+- **Display, buttons and face flow:** check in the simulator
+  (`emmake make …`, see `CLAUDE.md`), as the
+  [Per-PR checklist](#per-pr-checklist-mandatory) requires.
 - **On-watch behaviour** (power, sleep, sensors, real time passing): an
   agent can't check this. Before opening the PR, open a `manual-task` issue
   (group `devices`) saying what to flash and what to look for, and link it
