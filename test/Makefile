@@ -3,12 +3,14 @@
 
 # CC is make's default (cc) unless the environment sets it (the nix shell sets gcc).
 CFLAGS := -std=c11 -Wall -Wextra -Werror -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all
-CPPFLAGS := -I. -I../lib/zodiac
+CPPFLAGS := -I. -I../lib/zodiac -I../lib/planetary -I../lib/sunriset
+LDLIBS := -lm
 
 # One program per test file: add test_<name> to TESTS and list its sources
 # as test_<name>_SRCS.
-TESTS := test_zodiac
+TESTS := test_zodiac test_planetary
 test_zodiac_SRCS := test_zodiac.c ../lib/zodiac/zodiac.c
+test_planetary_SRCS := test_planetary.c ../lib/planetary/planetary.c ../lib/sunriset/sunriset.c
 
 .PHONY: test clean
 test: $(addprefix build/,$(TESTS))
@@ -21,7 +23,7 @@ HEADERS := $(wildcard *.h ../lib/*/*.h)
 
 build/%: $$($$*_SRCS) $(HEADERS)
 	@mkdir -p build
-	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $($*_SRCS)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $($*_SRCS) $(LDLIBS)
 
 clean:
 	rm -rf build

@@ -29,55 +29,15 @@
  */
 
 #include "planetary_hour_face.h"
-#include "sunriset.h"
+#include "planetary.h"
 #include "watch.h"
 #include "watch_utility.h"
-#include "watch_rtc.h" // For WATCH_RTC_REFERENCE_YEAR and related RTC definitions
 #include <string.h>
-#include <math.h> // Ensure math functions are available
 #include <stdlib.h>
 #include "filesystem.h"
 #include <stdio.h> // For sprintf/snprintf
 
-#define SUNRISE_SUNSET_ALTITUDE (-35.0 / 60.0) // Altitude for sunrise/sunset calculations
-
-#define PLANETARY_HOUR_ERROR 255 // Define an error code for planetary hour calculation failure
-#define ZODIAC_SIGN_ERROR 255    // Define an error code for zodiac sign calculation failure
-
 static const uint8_t _location_count = sizeof(longLatPresets) / sizeof(long_lat_presets_t);
-
-// Map of planetary rulers to day of the week values
-static const uint8_t week_days_to_chaldean_order[] = {
-    3, // Sunday
-    6, // Monday
-    2, // Tuesday
-    5, // Wednesday
-    1, // Thursday
-    4, // Friday
-    0  // Saturday
-};
-
-// Map of the Chaldean order numbers to the planets and abbreviations
-static const planet_names_t planet_names[] = {
-    {"Satur", "SA"},
-    {"Jupit", "JU"},
-    {"Mars ", "MA"},
-    {"Sun  ", "SU"},
-    {"Venus", "VE"},
-    {"Mercu", "ME"},
-    {"Moon ", "MO"}};
-
-static inline uint32_t _unix(watch_date_time_t t) { return watch_utility_date_time_to_unix_time(t, 0); }
-static inline watch_date_time_t _from_unix(uint32_t ts) { return watch_utility_date_time_from_unix_time(ts, 0); }
-static inline watch_date_time_t _midnight_of(watch_date_time_t t)
-{
-    t.unit.hour = t.unit.minute = t.unit.second = 0;
-    return t;
-}
-static inline watch_date_time_t _add_days(watch_date_time_t day_midnight, int d)
-{
-    return _from_unix(_unix(day_midnight) + 86400u * (uint32_t)(d >= 0 ? d : -d) * (d >= 0 ? 1 : -1));
-}
 
 static lat_lon_settings_t _planetary_hour_face_struct_from_latlon(int16_t val)
 {
@@ -97,128 +57,6 @@ static lat_lon_settings_t _planetary_hour_face_struct_from_latlon(int16_t val)
 
     return retval;
 }
-
-static void _planetary_hour_set_expiration(planetary_hour_state_t *state, watch_date_time_t next_hours_offset)
-{
-    uint32_t timestamp = _unix(next_hours_offset);
-    state->hour_offset_expires = _from_unix(timestamp + 60);
-}
-
-// Divides [period_start, period_end) into 12 equal planetary hours.
-// Returns which subdivision (0-11) contains target_time,
-// and writes the start/end of that subdivision to the out-params.
-static int _find_planetary_hour_in_period(watch_date_time_t period_start,
-                                          watch_date_time_t period_end,
-                                          watch_date_time_t target_time,
-                                          watch_date_time_t *hour_start_out,
-                                          watch_date_time_t *hour_end_out)
-{
-    uint32_t ps = _unix(period_start);
-    uint32_t pe = _unix(period_end);
-    uint32_t tt = _unix(target_time);
-
-    double hour_duration = (double)(pe - ps) / 12.0;
-    int index = (int)floor((double)(tt - ps) / hour_duration);
-
-    if (index < 0) index = 0;
-    if (index > 11) index = 11;
-
-    *hour_start_out = _from_unix(ps + (uint32_t)(index * hour_duration));
-    *hour_end_out   = _from_unix(ps + (uint32_t)((index + 1) * hour_duration));
-
-    return index;
-}
-
-// this will return an entry from the planet_names map
-static planet_names_t planetary_ruler_from_base_and_time(watch_date_time_t base_sunrise_local,
-                                                         int time_since_sunrise)
-{
-    // 1. Calculate the day of the week from base_sunrise_local
-    int year = base_sunrise_local.unit.year + WATCH_RTC_REFERENCE_YEAR;
-    int month = base_sunrise_local.unit.month;
-    int day = base_sunrise_local.unit.day;
-
-    // Adjust for Zeller's Congruence if the month is January or February
-    if (month < 3)
-    {
-        month += 12;
-        year -= 1;
-    }
-    uint8_t day_of_week = (day + (2 * month) + (3 * (month + 1) / 5) + year + (year / 4) - (year / 100) + (year / 400) + 1) % 7;
-
-    // 3. Get the ruler of the day from the day of the week
-    uint8_t ruler_of_day_index = week_days_to_chaldean_order[day_of_week];
-
-    // 4. Calculate the planetary ruler of the hour
-    int ruler_index = (ruler_of_day_index + time_since_sunrise) % 7;
-
-    // Return the corresponding planet from the planet_names map
-    return planet_names[ruler_index];
-}
-
-// --- Small time helpers (same rounding/carry style as your sunrise/sunset face) ---
-static watch_date_time_t _local_decimal_hours_to_dt(watch_date_time_t day_local, double local_hours_dec) {
-    watch_date_time_t t = day_local;
-
-    // Extract the integer part of local_hours_dec as the hour
-    int hour = (int)floor(local_hours_dec);
-    double fractional_hour = local_hours_dec - hour;
-
-    // Adjust for day rollover if the hour is negative or exceeds 23
-    if (hour < 0) {
-        hour += 24;
-        uint32_t ts = _unix(day_local);
-        ts -= 86400; // Subtract one day
-        t = _from_unix(ts);
-    } else if (hour >= 24) {
-        hour -= 24;
-        uint32_t ts = _unix(day_local);
-        ts += 86400; // Add one day
-        t = _from_unix(ts);
-    }
-
-    t.unit.hour = (uint8_t)hour;
-
-    // Calculate the fractional part for minutes and seconds
-    double minutes = 60.0 * fractional_hour;
-    double seconds = 60.0 * fmod(minutes, 1.0);
-
-    t.unit.minute = (seconds < 30.0) ? (uint8_t)floor(minutes) : (uint8_t)ceil(minutes);
-
-    if (t.unit.minute == 60) {
-        t.unit.minute = 0;
-        t.unit.hour = (uint8_t)((t.unit.hour + 1) % 24);
-        if (t.unit.hour == 0) {
-            uint32_t ts = _unix(t);
-            ts += 86400;
-            t = _from_unix(ts);
-        }
-    }
-
-    return t;
-}
-
-static bool _compute_local_sun_times(watch_date_time_t day_local,
-                                     double lon, double lat, double hours_from_utc,
-                                     watch_date_time_t *sunrise_local,
-                                     watch_date_time_t *sunset_local)
-{
-    double rise_utc_dec, set_utc_dec;
-    uint8_t result = sun_rise_set(day_local.unit.year + WATCH_RTC_REFERENCE_YEAR,
-                                  day_local.unit.month, day_local.unit.day,
-                                  lon, lat, &rise_utc_dec, &set_utc_dec);
-
-    if (result != 0)
-    {
-        return false; // polar day/night or error
-    }
-
-    *sunrise_local = _local_decimal_hours_to_dt(day_local, rise_utc_dec + hours_from_utc);
-    *sunset_local = _local_decimal_hours_to_dt(day_local, set_utc_dec + hours_from_utc);
-
-    return true;
-}
-
 
 static void _planetary_hour_face_advance_digit(planetary_hour_state_t *state)
 {
@@ -410,79 +248,27 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
         return;
     }
 
-    // get the current time and location
-    watch_date_time_t now_local = movement_get_local_date_time();
-    int16_t lat_centi = (int16_t)movement_location.bit.latitude;
-    int16_t lon_centi = (int16_t)movement_location.bit.longitude;
-    double lat = (double)lat_centi / 100.0;
-    double lon = (double)lon_centi / 100.0;
-    double hours_from_utc = ((double)movement_get_current_timezone_offset()) / 3600.0;
+    double lat = (double)(int16_t)movement_location.bit.latitude / 100.0;
+    double lon = (double)(int16_t)movement_location.bit.longitude / 100.0;
+    int32_t utc_offset = movement_get_current_timezone_offset();
 
-    // Find the target hour start by advancing hour_offset steps from "current planetary hour"
-    uint32_t unix_time = _unix(now_local);
-    unix_time += state->hour_offset * 3600;
-
-    watch_date_time_t target_time = _from_unix(unix_time);
-
-    // // Find the start of the current hour
-    // unix_time -= (unix_time % 3600);
-
-    // ----- Planetary base selection (your rule; anchored to "now") -----
-
-    watch_date_time_t target0 = _midnight_of(target_time);
-    watch_date_time_t sr_target_day, ss_target_day;
-    if (!_compute_local_sun_times(target0, lon, lat, hours_from_utc, &sr_target_day, &ss_target_day))
+    // The planetary hour containing the time hour_offset clock hours from now.
+    int64_t now = (int64_t)movement_get_utc_timestamp();
+    int64_t target = now + (int64_t)state->hour_offset * 3600;
+    planetary_hour_t hour;
+    if (!planetary_hour_at(target, utc_offset, lat, lon, &hour))
     {
+        // Polar day or night lasts days, so retry hourly instead of on every tick.
+        state->hour_offset_expires = watch_utility_date_time_from_unix_time((uint32_t)(now + 3600), utc_offset);
         watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "PHour", "PH");
         watch_display_text(WATCH_POSITION_BOTTOM, "None  ");
         return;
     }
 
-
-    watch_date_time_t period_start, period_end;
-    bool is_night = false;
-    watch_date_time_t base_day = target0; // the day whose ruler we use
-
-    uint32_t tt = _unix(target_time);
-
-    if (tt < _unix(sr_target_day)) {
-        // Before sunrise: still in yesterday's night period
-        watch_date_time_t sr_prev_day, ss_prev_day;
-        watch_date_time_t target_neg1 = _add_days(target0, -1);
-        _compute_local_sun_times(target_neg1, lon, lat, hours_from_utc, &sr_prev_day, &ss_prev_day);
-        period_start = ss_prev_day;
-        period_end = sr_target_day;
-        is_night = true;
-        base_day = target_neg1; // yesterday's ruler
-    } else if (tt >= _unix(ss_target_day)) {
-        // After sunset: tonight's period
-        watch_date_time_t sr_next_day, ss_next_day;
-        watch_date_time_t target1 = _add_days(target0, 1);
-        _compute_local_sun_times(target1, lon, lat, hours_from_utc, &sr_next_day, &ss_next_day);
-        period_start = ss_target_day;
-        period_end = sr_next_day;
-        is_night = true;
-        base_day = target0; // today's ruler
-    } else {
-        // Between sunrise and sunset: daytime
-        period_start = sr_target_day;
-        period_end = ss_target_day;
-        is_night = false;
-        base_day = target0; // today's ruler
-    }
-
-    // Divide the period into 12 equal planetary hours
-    watch_date_time_t hour_start, hour_end;
-    int hour_index = _find_planetary_hour_in_period(period_start, period_end, target_time,
-                                                     &hour_start, &hour_end);
-
-    // Night hours are hours 13-24 of the planetary day (offset by 12)
-    int chaldean_offset = hour_index + (is_night ? 12 : 0);
-
-    planet_names_t ruler = planetary_ruler_from_base_and_time(base_day, chaldean_offset);
-    watch_date_time_t display_time = hour_start;
-
-    _planetary_hour_set_expiration(state, hour_end);
+    planetary_planet_t ruler = planetary_planets[hour.ruler];
+    // Shown to the nearest minute, as sunrise_sunset_face rounds sunrise.
+    watch_date_time_t display_time = watch_utility_date_time_from_unix_time((uint32_t)(hour.start + 30), utc_offset);
+    state->hour_offset_expires = watch_utility_date_time_from_unix_time((uint32_t)(hour.end + 60), utc_offset);
 
     // ---- DISPLAY ----
     watch_set_colon();

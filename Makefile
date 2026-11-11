@@ -79,6 +79,7 @@ INCLUDES += \
   -I./lib/chirpy_tx \
   -I./lib/base64 \
   -I./lib/zodiac \
+  -I./lib/planetary \
   -I./watch-library/shared/watch \
   -I./watch-library/shared/driver \
   -I./watch-faces/clock \
@@ -108,6 +109,7 @@ SRCS += \
   ./lib/chirpy_tx/chirpy_tx.c \
   ./lib/base64/base64.c \
   ./lib/zodiac/zodiac.c \
+  ./lib/planetary/planetary.c \
   ./watch-library/shared/driver/thermistor_driver.c \
   ./watch-library/shared/watch/watch_common_buzzer.c \
   ./watch-library/shared/watch/watch_common_display.c \
