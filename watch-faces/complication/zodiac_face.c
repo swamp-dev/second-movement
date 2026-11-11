@@ -16,13 +16,13 @@ static const struct {
     {"Aries", 3, 21, "AR"},
     {"Tauru", 4, 20, "TA"},
     {"Gemin", 5, 21, "GE"},
-    {"Cance", 6, 21, "CA"},
+    {"Cance", 6, 21, "CN"},
     {"Leo  ", 7, 23, "LE"},
     {"Virgo", 8, 23, "VI"},
     {"Libra", 9, 23, "LI"},
     {"Scorp", 10, 23, "SC"},
     {"Sagit", 11, 22, "SA"},
-    {"Capri", 12, 22, "CA"},
+    {"Capri", 12, 22, "CR"},
 };
 
 #define ZODIAC_SIGN_COUNT (sizeof(zodiac_signs) / sizeof(zodiac_signs[0]))
