@@ -41,14 +41,15 @@ This adapts `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`; where they 
    and why. When unsure whether logic is trivial, write the test.
 2. **Simulator check.** Every change under `watch-faces/`, to
    `movement*.{c,h}`, or to `lib/`, `filesystem/`, `location/` or
-   `watch-library/` code a built face calls is checked in the simulator before the PR opens. Drive
+   `watch-library/` code a built face calls is checked in the simulator
+   before the PR opens. Drive
    the screens and buttons the change affects (for shared code, a face
    that calls it, named), and record the steps and what you saw in the Test
    plan. Build-system, CI, docs and test-only changes record
    "Simulator: N/A". An agent should always be able to do this check; if it
    can't, open a `manual-task` issue for it, labelled `priority:high` since
-   the merged code is unchecked until it's done, and link it from the Test
-   plan. That issue satisfies this item for the merge gate.
+   the merged code is unchecked until it's done, and link it under Manual
+   follow-ups. That issue satisfies this item for the merge gate.
 3. **Code review.** Run the `code-reviewer` subagent on the diff. If the
    diff touches `*.md`, `docs/` or `.claude/`, also run `docs-reviewer`.
 4. **Address findings.** Fix every critical and significant finding. If a
@@ -58,9 +59,9 @@ This adapts `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`; where they 
    unit tests and builds the firmware and simulator for every board ×
    display. Every combination must pass, and a single-combination run
    doesn't count.
-6. **Apply fixes** for any local failure. If a fix touches behaviour the
-   review didn't cover, restart from step 3, and redo steps 1 and 2 if the
-   fix changes behaviour.
+6. **Apply fixes** for any local failure. If a fix changes behaviour, redo
+   steps 1 and 2 for it. If it touches code the review didn't cover, restart
+   from step 3.
 7. **Re-review when the fixes were substantial**, meaning any of:
    - new files since the first review;
    - more than 50 net lines added since then;
@@ -125,10 +126,10 @@ These PRs always go to the user to merge, even when every condition holds:
 
 - **Gate-introducing PRs:** changes to this doc, `CLAUDE.md`'s CI commands
   or Testing sections, `scripts/ci-local.sh`, `test/check.h`,
-  `test/Makefile` (except adding a `test_<name>` to `TESTS` with its
-  `test_<name>_SRCS`, or a `-I../lib/<dir>` line, which are routine, as
-  are the root `Makefile` lines for a new `lib/<dir>`),
-  anything under `.claude/`, or `.github/workflows/`.
+  `test/Makefile`, anything under `.claude/`, or `.github/workflows/`.
+  Routine `test/Makefile` edits don't count: adding a `test_<name>` to
+  `TESTS` with its `test_<name>_SRCS`, or a `-I../lib/<dir>` to
+  `CPPFLAGS`, nor do the root `Makefile` lines for a new `lib/<dir>`.
 - Submodule pointer bumps (`gossamer`, `littlefs`, `tinyusb`, `utz`).
 - Upstream syncs from `joeycastillo/second-movement`.
 
