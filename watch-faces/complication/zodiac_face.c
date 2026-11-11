@@ -5,10 +5,9 @@
 #include "watch_utility.h"
 #include "zodiac.h"
 
-// Index of the sign in effect on today's local date.
+// Index of the sign the Sun is in now.
 static int8_t get_current_zodiac_sign(void) {
-    watch_date_time_t now = movement_get_local_date_time();
-    return zodiac_sign_for_date(now.unit.month, now.unit.day);
+    return zodiac_sign_at((int64_t)movement_get_utc_timestamp());
 }
 
 void zodiac_face_setup(uint8_t watch_face_index, void **context_ptr) {
@@ -27,10 +26,11 @@ static void _zodiac_face_display(zodiac_face_state_t *state) {
       return;
     }
 
-    // Display the current zodiac sign and its start date
+    // Display the sign and the local date the Sun enters it, nearest to now
     const char *current_sign = zodiac_signs[state->current_sign_index].name;
-    uint8_t start_month = zodiac_signs[state->current_sign_index].start_month;
-    uint8_t start_day = zodiac_signs[state->current_sign_index].start_day;
+    uint8_t start_month, start_day;
+    zodiac_sign_start_date(state->current_sign_index, (int64_t)movement_get_utc_timestamp(),
+                           movement_get_current_timezone_offset(), &start_month, &start_day);
 
     char bottom[9];
     snprintf(bottom, sizeof(bottom), "%02u%02uSt", start_month, start_day);
