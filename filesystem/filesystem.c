@@ -204,9 +204,10 @@ bool filesystem_read_file(char *filename, char *buf, int32_t length) {
     if (file_size > 0) {
         int err = lfs_file_open(&eeprom_filesystem, &file, filename, LFS_O_RDONLY);
         if (err < 0) return false;
-        err = lfs_file_read(&eeprom_filesystem, &file, buf, min(length, file_size));
-        if (err < 0) return false;
-        return lfs_file_close(&eeprom_filesystem, &file) == LFS_ERR_OK;
+        lfs_ssize_t read = lfs_file_read(&eeprom_filesystem, &file, buf, min(length, file_size));
+        // Close on every path: `file` is shared, and littlefs can't reopen it while it's open.
+        err = lfs_file_close(&eeprom_filesystem, &file);
+        return read >= 0 && err == LFS_ERR_OK;
     }
 
     return false;
@@ -218,10 +219,12 @@ bool filesystem_read_line(char *filename, char *buf, int32_t *offset, int32_t le
     if (file_size > 0) {
         int err = lfs_file_open(&eeprom_filesystem, &file, filename, LFS_O_RDONLY);
         if (err < 0) return false;
-        err = lfs_file_seek(&eeprom_filesystem, &file, *offset, LFS_SEEK_SET);
-        if (err < 0) return false;
-        err = lfs_file_read(&eeprom_filesystem, &file, buf, min(length - 1, file_size - *offset));
-        if (err < 0) return false;
+        lfs_ssize_t read = lfs_file_seek(&eeprom_filesystem, &file, *offset, LFS_SEEK_SET);
+        if (read >= 0)
+            read = lfs_file_read(&eeprom_filesystem, &file, buf, min(length - 1, file_size - *offset));
+        // Close on every path: `file` is shared, and littlefs can't reopen it while it's open.
+        err = lfs_file_close(&eeprom_filesystem, &file);
+        if (read < 0 || err != LFS_ERR_OK) return false;
         for(int i = 0; i < length; i++) {
             (*offset)++;
             if (buf[i] == '\n') {
@@ -229,7 +232,7 @@ bool filesystem_read_line(char *filename, char *buf, int32_t *offset, int32_t le
                 break;
             }
         }
-        return lfs_file_close(&eeprom_filesystem, &file) == LFS_ERR_OK;
+        return true;
     }
 
     return false;
@@ -253,30 +256,29 @@ static void filesystem_cat(char *filename) {
     }
 }
 
-bool filesystem_write_file(char *filename, char *text, int32_t length) {
+// littlefs commits a file only when it's closed (or synced), and a write that
+// fails marks the file errored so the close commits nothing. So closing after a
+// failed write keeps the old contents, and it must still happen: `file` is
+// shared, and littlefs can't reopen it while it's open.
+static bool _filesystem_write(char *filename, int flags, char *text, int32_t length) {
     if (filesystem_get_free_space() <= 256) {
         printf("No free space!\n");
-        return false;    
+        return false;
     }
 
-    int err = lfs_file_open(&eeprom_filesystem, &file, filename, LFS_O_RDWR | LFS_O_CREAT | LFS_O_TRUNC);
+    int err = lfs_file_open(&eeprom_filesystem, &file, filename, flags);
     if (err < 0) return false;
-    err = lfs_file_write(&eeprom_filesystem, &file, text, length);
-    if (err < 0) return false;
-    return lfs_file_close(&eeprom_filesystem, &file) == LFS_ERR_OK;
+    lfs_ssize_t written = lfs_file_write(&eeprom_filesystem, &file, text, length);
+    err = lfs_file_close(&eeprom_filesystem, &file);
+    return written == length && err == LFS_ERR_OK;
+}
+
+bool filesystem_write_file(char *filename, char *text, int32_t length) {
+    return _filesystem_write(filename, LFS_O_RDWR | LFS_O_CREAT | LFS_O_TRUNC, text, length);
 }
 
 bool filesystem_append_file(char *filename, char *text, int32_t length) {
-    if (filesystem_get_free_space() <= 256) {
-        printf("No free space!\n");
-        return false;    
-    }
-
-    int err = lfs_file_open(&eeprom_filesystem, &file, filename, LFS_O_WRONLY | LFS_O_CREAT | LFS_O_APPEND);
-    if (err < 0) return false;
-    err = lfs_file_write(&eeprom_filesystem, &file, text, length);
-    if (err < 0) return false;
-    return lfs_file_close(&eeprom_filesystem, &file) == LFS_ERR_OK;
+    return _filesystem_write(filename, LFS_O_WRONLY | LFS_O_CREAT | LFS_O_APPEND, text, length);
 }
 
 int filesystem_cmd_ls(int argc, char *argv[]) {
