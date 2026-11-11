@@ -191,6 +191,95 @@ static void test_whole_year_tromso(void) {
     CHECK_EQ_INT(bad, 0, "Tromso: hours breaking the rules");
 }
 
+static bool step(const place_t *p, const planetary_hour_t *from, int steps, planetary_hour_t *h) {
+    return planetary_hour_step(from, steps, p->offset, p->lat, p->lon, h);
+}
+
+// One press at a time, `presses` times in direction `dir` (+1 or -1), from the
+// hour containing `t`: each press must land on the neighbouring hour, so no hour
+// is skipped or shown twice, whatever the hours' length (#5).
+static void check_presses(const place_t *p, int64_t t, int dir, int presses) {
+    planetary_hour_t h, next;
+    CHECK(at(p, t, &h));
+    for (int k = 1; k <= presses; k++) {
+        if (!step(p, &h, dir, &next)) {
+            CHECK_EQ_INT(k, 0, "%s: press %d failed", p->name, k);
+            return;
+        }
+        bool ok = dir > 0 ? next.start == h.end : next.end == h.start;
+        ok = ok && next.hour_number == (h.hour_number + 24 + dir) % 24
+            && next.ruler == (h.ruler + 7 + dir) % 7;
+        CHECK_EQ_INT(ok, 1, "%s: press %d from hour %u (%lld..%lld) gave hour %u (%lld..%lld)",
+                     p->name, k, h.hour_number, (long long)h.start, (long long)h.end,
+                     next.hour_number, (long long)next.start, (long long)next.end);
+        h = next;
+    }
+}
+
+// The #5 report: New York, Tuesday 15 December 2026 from 09:40, where day hours
+// last about 46 minutes and night hours about 74. Clock-hour steps skipped hours
+// 7 and 12 and repeated hour 13.
+static void test_step_forward_short_and_long_hours(void) {
+    const place_t new_york = places[0];
+    planetary_hour_t h, s;
+    CHECK(at(&new_york, local_time(2026, 12, 15, 9, 40, new_york.offset), &h));
+    CHECK_EQ_INT(h.hour_number, 4, "New York 09:40");
+    CHECK_EQ_INT(h.ruler, MERCURY, "New York 09:40");
+    CHECK(step(&new_york, &h, 3, &s));
+    CHECK_EQ_INT(s.hour_number, 7, "three presses from hour 4");
+    CHECK_EQ_INT(s.ruler, JUPITER, "three presses from hour 4");
+
+    // Two days forward from there, across sunsets, midnights and sunrises.
+    check_presses(&new_york, local_time(2026, 12, 15, 9, 40, new_york.offset), +1, 48);
+}
+
+// The #5 report going backward: London, 20 June 2026 from 14:00, with 75-minute
+// day hours, back across sunrise, midnight and the previous sunset.
+static void test_step_backward_across_sunrise_sunset_midnight(void) {
+    check_presses(&london, local_time(2026, 6, 20, 14, 0, 0), -1, 48);
+    check_presses(&reykjavik, local_time(2026, 6, 21, 3, 0, 0), -1, 48);
+}
+
+// Every place, both directions, a week of presses from the March equinox
+// and from both solstices.
+static void test_step_everywhere(void) {
+    const int dates[][2] = {{3, 20}, {6, 21}, {12, 21}};
+    for (size_t i = 0; i < sizeof places / sizeof places[0]; i++) {
+        for (size_t d = 0; d < 3; d++) {
+            int64_t t = local_time(2026, dates[d][0], dates[d][1], 12, 0, places[i].offset);
+            check_presses(&places[i], t, +1, 24 * 7);
+            check_presses(&places[i], t, -1, 24 * 7);
+        }
+    }
+}
+
+// Stepping n at once is the same as n single presses, and 0 steps is the hour itself.
+static void test_step_many_equals_repeated_single(void) {
+    planetary_hour_t h, many, single;
+    CHECK(at(&london, local_time(2026, 3, 20, 18, 0, 0), &h));
+    CHECK(step(&london, &h, 0, &many));
+    CHECK(memcmp(&many, &h, sizeof h) == 0);
+
+    const int counts[] = {30, -30};
+    for (int c = 0; c < 2; c++) {
+        CHECK(step(&london, &h, counts[c], &many));
+        single = h;
+        for (int k = 0; k < 30; k++) CHECK(step(&london, &single, counts[c] > 0 ? 1 : -1, &single));
+        CHECK(memcmp(&many, &single, sizeof h) == 0);
+    }
+}
+
+// Stepping into polar day fails and leaves *out alone: Tromso's last sunset
+// before the midnight sun is on about 17 May 2026.
+static void test_step_into_polar_day(void) {
+    planetary_hour_t h, out;
+    CHECK(at(&tromso, local_time(2026, 5, 15, 12, 0, tromso.offset), &h));
+    memset(&out, 0xAB, sizeof out);
+    planetary_hour_t untouched = out;
+    CHECK(!step(&tromso, &h, 24 * 10, &out));
+    CHECK(memcmp(&out, &untouched, sizeof out) == 0);
+}
+
 static void test_table_strings(void) {
     for (int i = 0; i < PLANETARY_PLANET_COUNT; i++) {
         CHECK_EQ_INT(strlen(planetary_planets[i].name), 5, "name of planet %d", i);
@@ -208,6 +297,11 @@ int main(void) {
     test_polar_day_and_night();
     test_whole_year_everywhere();
     test_whole_year_tromso();
+    test_step_forward_short_and_long_hours();
+    test_step_backward_across_sunrise_sunset_midnight();
+    test_step_everywhere();
+    test_step_many_equals_repeated_single();
+    test_step_into_polar_day();
     test_table_strings();
     return check_summary("test_planetary");
 }

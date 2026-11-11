@@ -63,4 +63,12 @@ typedef struct {
 bool planetary_hour_at(int64_t now, int32_t utc_offset, double latitude, double longitude,
                        planetary_hour_t *out);
 
+// The planetary hour `steps` hours after *from (before it when negative),
+// counted by hour number, so every step lands on the next or previous hour
+// whatever their length. *from must come from planetary_hour_at() or this
+// function with the same place and offset; *out may be the same struct.
+// Returns false, leaving *out unchanged, when a step reaches polar day or night.
+bool planetary_hour_step(const planetary_hour_t *from, int steps, int32_t utc_offset,
+                         double latitude, double longitude, planetary_hour_t *out);
+
 #endif // PLANETARY_H_
