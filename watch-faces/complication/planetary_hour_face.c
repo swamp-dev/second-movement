@@ -281,12 +281,13 @@ static void _planetary_hour_face_display(const planetary_hour_t *hour, int32_t u
     watch_display_text(WATCH_POSITION_BOTTOM, buf);
 }
 
-// A message in place of an hour. The whole top row and the hour's colon and PM
-// indicator are overwritten, so nothing of a previously shown hour remains (#10).
+// A message in place of an hour. The whole top row and every indicator the hour
+// display sets are overwritten, so nothing of a previously shown hour remains.
 static void _planetary_hour_face_display_message(const char *message, const char *fallback)
 {
     watch_clear_colon();
     watch_clear_indicator(WATCH_INDICATOR_PM);
+    watch_clear_indicator(WATCH_INDICATOR_24H);
     watch_display_text_with_fallback(WATCH_POSITION_TOP, "PHour ", "PH");
     watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, message, fallback);
 }

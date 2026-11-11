@@ -130,20 +130,25 @@ static void test_polar_day_and_night(void) {
     CHECK(memcmp(&h, &untouched, sizeof h) == 0);
 }
 
-// The days #10 reproduced an uninitialized read on: Tromso's first or last day
-// with a sunrise, whose neighbouring day has none. Every 10 minutes of each day
-// either has no planetary hour, leaving *out alone, or one that contains the
-// instant and has sane bounds. Build with clang -fsanitize=memory to check that
-// nothing uninitialized is read (see the PR for #10).
+// Tromso's first and last days with a sunrise, whose neighbouring day has none,
+// at the offset Tromso uses on each (CET or CEST). The old face read sun times
+// that were never set on these days (#10). Every 10 minutes of each day either
+// has no planetary hour, leaving *out alone, or one that contains the instant
+// and has sane bounds. Reads of uninitialized memory inside the library need a
+// clang -fsanitize=memory build to show up; this gate builds with ASan and UBSan.
 static void test_tromso_days_next_to_polar(void) {
-    static const int days[][2] = {{1, 15}, {5, 17}, {7, 26}, {11, 27}};
+    static const struct { int month, day; int32_t offset; } days[] = {
+        {1, 15, 3600}, {5, 17, 7200}, {7, 26, 7200}, {11, 27, 3600},
+    };
     for (size_t i = 0; i < sizeof days / sizeof days[0]; i++) {
+        place_t p = tromso;
+        p.offset = days[i].offset;
         for (int minute = 0; minute < 24 * 60; minute += 10) {
-            int64_t t = local_time(2026, days[i][0], days[i][1], minute / 60, minute % 60, tromso.offset);
+            int64_t t = local_time(2026, days[i].month, days[i].day, minute / 60, minute % 60, p.offset);
             planetary_hour_t h, untouched;
             memset(&h, 0xAB, sizeof h);
             untouched = h;
-            if (!at(&tromso, t, &h)) {
+            if (!at(&p, t, &h)) {
                 CHECK(memcmp(&h, &untouched, sizeof h) == 0);
                 continue;
             }
