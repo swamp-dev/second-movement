@@ -110,7 +110,8 @@ static void test_five_years_daily(void) {
         }
         last = s; last_m = m; last_d = d;
     }
-    CHECK_EQ_INT(changes, 5 * 12 - 1, "sign changes in 5 years");
+    // 1 Jan 2026 to 30 Dec 2030: every sign starts once a year, Capricorn on ~21 Dec.
+    CHECK_EQ_INT(changes, 5 * 12, "sign changes in 5 years");
 }
 
 static void test_table_strings(void) {
