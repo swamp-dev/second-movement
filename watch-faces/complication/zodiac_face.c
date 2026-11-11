@@ -17,17 +17,10 @@ void zodiac_face_setup(uint8_t watch_face_index, void **context_ptr) {
     if (*context_ptr == NULL) {
         *context_ptr = malloc(sizeof(zodiac_face_state_t));
         memset(*context_ptr, 0, sizeof(zodiac_face_state_t));
-
-        // Initialize to the current zodiac sign based on the date
-        ((zodiac_face_state_t *)*context_ptr)->current_sign_index = get_current_zodiac_sign();
     }
 }
 
-void zodiac_face_activate(void *context) {
-    if (watch_sleep_animation_is_running()) watch_stop_sleep_animation();
-
-    zodiac_face_state_t *state = (zodiac_face_state_t *)context;
-
+static void _zodiac_face_display(zodiac_face_state_t *state) {
     if (state->current_sign_index == -1) {
       watch_display_text_with_fallback(WATCH_POSITION_TOP, "Zodia", "ZC");
       watch_display_text(WATCH_POSITION_BOTTOM, "Error");
@@ -46,14 +39,28 @@ void zodiac_face_activate(void *context) {
     watch_display_text(WATCH_POSITION_BOTTOM, bottom);
 }
 
+void zodiac_face_activate(void *context) {
+    if (watch_sleep_animation_is_running()) watch_stop_sleep_animation();
+
+    zodiac_face_state_t *state = (zodiac_face_state_t *)context;
+
+    // Setup runs once at boot, before the clock is set, so the sign must be
+    // recomputed here or the face would show the boot-time sign forever.
+    state->current_sign_index = get_current_zodiac_sign();
+}
+
 bool zodiac_face_loop(movement_event_t event, void *context) {
     zodiac_face_state_t *state = (zodiac_face_state_t *)context;
 
     switch (event.event_type) {
+        case EVENT_ACTIVATE:
+            _zodiac_face_display(state);
+            break;
+
         case EVENT_ALARM_BUTTON_UP:
             // Move to the next zodiac sign
             state->current_sign_index = (state->current_sign_index + 1) % ZODIAC_SIGN_COUNT;
-            zodiac_face_activate(context); // Update the display
+            _zodiac_face_display(state);
             break;
 
         case EVENT_LOW_ENERGY_UPDATE:
@@ -68,7 +75,7 @@ bool zodiac_face_loop(movement_event_t event, void *context) {
             } else {
                 state->current_sign_index--;
             }
-            zodiac_face_activate(context); // Update the display
+            _zodiac_face_display(state);
             break;
 
         case EVENT_LIGHT_LONG_PRESS:
