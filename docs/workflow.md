@@ -34,8 +34,9 @@ This adapts `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`; where they 
 2. **Address findings.** Fix every critical and significant finding. List
    any minor ones you don't fix in the PR body.
 3. **Run all CI jobs locally:** `scripts/ci-local.sh`, which runs the host
-   unit tests and builds the firmware and simulator for every board × display. Every combination
-   must pass, and a single-combination run doesn't count.
+   unit tests and builds the firmware and simulator for every board ×
+   display. Every combination must pass, and a single-combination run
+   doesn't count.
 4. **Apply fixes** for any local failure. If a fix touches behaviour the
    review didn't cover, restart from step 1.
 5. **Re-review when the fixes were substantial**, meaning any of:
@@ -64,10 +65,9 @@ current head or hand the PR to the user.
 ## Testing
 
 - **Pure logic** (time, astronomy, zodiac, packing and unpacking): TDD with
-  host unit tests (`make -C test`; how to add one is in `CLAUDE.md` §
-  Testing). Put the logic in a pure function with no `watch_*` or
-  `movement_*` calls, write a failing test, and commit the test before the
-  implementation.
+  host unit tests (`make -C test`; how to add one is in
+  [`CLAUDE.md` § Testing](../CLAUDE.md#testing)). Put the logic in a pure
+  function with no `watch_*` or `movement_*` calls.
 - **Display, buttons and face flow:** check in the simulator
   (`emmake make …`, see `CLAUDE.md`) and describe what you checked in the
   PR. If you can't drive a browser, say so in the Test plan and leave the
@@ -96,8 +96,8 @@ the user merges. **This repo relaxes that.** The agent may merge through
 These PRs always go to the user to merge, even when every condition holds:
 
 - **Gate-introducing PRs:** changes to this doc, `CLAUDE.md`'s CI commands
-  or Testing sections, `scripts/ci-local.sh`, anything under `.claude/`, or
-  `.github/workflows/`.
+  or Testing sections, `scripts/ci-local.sh`, `test/Makefile`,
+  `test/check.h`, anything under `.claude/`, or `.github/workflows/`.
 - Submodule pointer bumps (`gossamer`, `littlefs`, `tinyusb`, `utz`).
 - Upstream syncs from `joeycastillo/second-movement`.
 
