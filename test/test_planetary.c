@@ -217,17 +217,18 @@ static void check_presses(const place_t *p, int64_t t, int dir, int presses) {
 }
 
 // The #5 report: New York, Tuesday 15 December 2026 from 09:40, where day hours
-// last about 46 minutes and night hours about 74. Clock-hour steps skipped hours
-// 7 and 12 and repeated hour 13.
+// last about 46 minutes and night hours about 74. Clock-hour steps skipped the
+// report's hours 7 and 12 and repeated hour 13 (it counts from 1; hour_number
+// counts from 0).
 static void test_step_forward_short_and_long_hours(void) {
     const place_t new_york = places[0];
     planetary_hour_t h, s;
     CHECK(at(&new_york, local_time(2026, 12, 15, 9, 40, new_york.offset), &h));
-    CHECK_EQ_INT(h.hour_number, 4, "New York 09:40");
+    CHECK_EQ_INT(h.hour_number, 3, "New York 09:40");
     CHECK_EQ_INT(h.ruler, MERCURY, "New York 09:40");
     CHECK(step(&new_york, &h, 3, &s));
-    CHECK_EQ_INT(s.hour_number, 7, "three presses from hour 4");
-    CHECK_EQ_INT(s.ruler, JUPITER, "three presses from hour 4");
+    CHECK_EQ_INT(s.hour_number, 6, "three presses from hour 3");
+    CHECK_EQ_INT(s.ruler, JUPITER, "three presses from hour 3, the one clock hours skipped");
 
     // Two days forward from there, across sunsets, midnights and sunrises.
     check_presses(&new_york, local_time(2026, 12, 15, 9, 40, new_york.offset), +1, 48);
