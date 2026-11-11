@@ -37,7 +37,7 @@
 #include <math.h> // Ensure math functions are available
 #include <stdlib.h>
 #include "filesystem.h"
-#include <stdio.h> // For debug logging
+#include <stdio.h> // For sprintf/snprintf
 
 #define SUNRISE_SUNSET_ALTITUDE (-35.0 / 60.0) // Altitude for sunrise/sunset calculations
 
@@ -183,9 +183,6 @@ static watch_date_time_t _local_decimal_hours_to_dt(watch_date_time_t day_local,
     double minutes = 60.0 * fractional_hour;
     double seconds = 60.0 * fmod(minutes, 1.0);
 
-    printf("Debug: Converting decimal hours to date-time. Decimal hours: %.2f, Hour: %d, Minutes: %.2f, Seconds: %.2f\n",
-           local_hours_dec, t.unit.hour, minutes, seconds);
-
     t.unit.minute = (seconds < 30.0) ? (uint8_t)floor(minutes) : (uint8_t)ceil(minutes);
 
     if (t.unit.minute == 60) {
@@ -197,8 +194,6 @@ static watch_date_time_t _local_decimal_hours_to_dt(watch_date_time_t day_local,
             t = _from_unix(ts);
         }
     }
-
-    printf("Debug: Converted time: %02d:%02d\n", t.unit.hour, t.unit.minute);
 
     return t;
 }
@@ -213,22 +208,13 @@ static bool _compute_local_sun_times(watch_date_time_t day_local,
                                   day_local.unit.month, day_local.unit.day,
                                   lon, lat, &rise_utc_dec, &set_utc_dec);
 
-    printf("Debug: Computing sun times for date: %04d-%02d-%02d, lon: %.2f, lat: %.2f, UTC offset: %.2f\n",
-           day_local.unit.year + WATCH_RTC_REFERENCE_YEAR, day_local.unit.month, day_local.unit.day, lon, lat, hours_from_utc);
-    printf("Debug: Raw sunrise (UTC): %.2f, Raw sunset (UTC): %.2f\n", rise_utc_dec, set_utc_dec);
-
     if (result != 0)
     {
-        printf("Debug: Error in sun_rise_set calculation, result: %d\n", result);
         return false; // polar day/night or error
     }
 
     *sunrise_local = _local_decimal_hours_to_dt(day_local, rise_utc_dec + hours_from_utc);
     *sunset_local = _local_decimal_hours_to_dt(day_local, set_utc_dec + hours_from_utc);
-
-    printf("Debug: Local sunrise: %02d:%02d, Local sunset: %02d:%02d\n",
-           sunrise_local->unit.hour, sunrise_local->unit.minute,
-           sunset_local->unit.hour, sunset_local->unit.minute);
 
     return true;
 }
@@ -497,12 +483,6 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
     watch_date_time_t display_time = hour_start;
 
     _planetary_hour_set_expiration(state, hour_end);
-
-    printf("Period: %02d:%02d-%02d:%02d, Hour: %d, Night: %d, Ruler: %s, Display: %02d:%02d\n",
-           period_start.unit.hour, period_start.unit.minute,
-           period_end.unit.hour, period_end.unit.minute,
-           hour_index, is_night, ruler.name,
-           display_time.unit.hour, display_time.unit.minute);
 
     // ---- DISPLAY ----
     watch_set_colon();

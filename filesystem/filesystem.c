@@ -372,7 +372,6 @@ int filesystem_cmd_echo(int argc, char *argv[]) {
 
 movement_location_t load_location_from_filesystem() {
     movement_location_t location = {0};
-    printf("[DEBUG] Loading location from filesystem\n");
     filesystem_read_file("location.u32", (char *) &location.reg, sizeof(movement_location_t));
     return location;
 }
