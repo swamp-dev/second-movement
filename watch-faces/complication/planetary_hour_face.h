@@ -36,7 +36,7 @@ typedef struct {
     int16_t hour_offset;   // planetary hours from the current one: 0 = current, +1 = next, -1 = previous, etc.
     bool shown_valid;      // `shown` holds the planetary hour on the display
     planetary_hour_t shown;  // the current planetary hour moved by hour_offset hours
-    uint32_t refresh_at;   // Unix time to recompute: when the current planetary hour ends
+    uint32_t refresh_at;   // Unix time to recompute: when the current planetary hour ends (hourly on polar day or night, never while No LOC)
     location_state_t location_state; 
 } planetary_hour_state_t;
 

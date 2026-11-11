@@ -301,19 +301,23 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
     if (!_planetary_hour_face_location(state, &lat, &lon))
     {
         state->shown_valid = false;
+        // Only the location editor and preset switch can change this, and both
+        // call this function, so ticks need not re-read the location.
+        state->refresh_at = UINT32_MAX;
         _planetary_hour_face_display_message("No LOC", "No Loc");
         return;
     }
 
     int32_t utc_offset = movement_get_current_timezone_offset();
     int64_t now = (int64_t)movement_get_utc_timestamp();
-    int64_t changes_at;
+    // Polar day or night lasts days, so when even the current hour is polar,
+    // retry hourly instead of on every tick.
+    int64_t changes_at = now + 3600;
     state->shown_valid = planetary_hour_from_now(now, state->hour_offset, utc_offset, lat, lon,
                                                  &state->shown, &changes_at);
     if (!state->shown_valid)
     {
-        // Polar day or night lasts days, so retry hourly instead of on every tick.
-        state->refresh_at = (uint32_t)(now + 3600);
+        state->refresh_at = (uint32_t)changes_at;
         _planetary_hour_face_display_message("None  ", "None  ");
         return;
     }

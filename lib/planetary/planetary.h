@@ -74,7 +74,10 @@ bool planetary_hour_step(const planetary_hour_t *from, int steps, int32_t utc_of
 // What a face browsing planetary hours shows: the hour `steps` hours from the
 // one containing `now`. *changes_at is when that answer next changes, the end
 // of the hour containing `now`, after which it is the following hour, for any
-// `steps`. Returns false, leaving both outputs unchanged, on polar day or night.
+// `steps`. Returns false, leaving *out unchanged, on polar day or night. Even
+// then *changes_at is set when only the browsed hour is polar, since the answer
+// can still change when the current hour ends; it is left unchanged when the
+// current hour itself is polar.
 bool planetary_hour_from_now(int64_t now, int steps, int32_t utc_offset, double latitude,
                              double longitude, planetary_hour_t *out, int64_t *changes_at);
 
