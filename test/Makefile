@@ -9,7 +9,7 @@ LDLIBS := -lm
 # One program per test file: add test_<name> to TESTS and list its sources
 # as test_<name>_SRCS.
 TESTS := test_zodiac test_planetary
-test_zodiac_SRCS := test_zodiac.c ../lib/zodiac/zodiac.c
+test_zodiac_SRCS := test_zodiac.c ../lib/zodiac/zodiac.c ../lib/sunriset/sunriset.c
 test_planetary_SRCS := test_planetary.c ../lib/planetary/planetary.c ../lib/sunriset/sunriset.c
 
 .PHONY: test clean
