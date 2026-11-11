@@ -22,7 +22,7 @@ static const struct {
     {"Libra", 9, 23, "LI"},
     {"Scorp", 10, 23, "SC"},
     {"Sagit", 11, 22, "SA"},
-    {"Capri", 12, 22, "CP"},
+    {"Capri", 12, 22, "CR"},
 };
 
 #define ZODIAC_SIGN_COUNT (sizeof(zodiac_signs) / sizeof(zodiac_signs[0]))
