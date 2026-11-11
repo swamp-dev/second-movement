@@ -48,6 +48,18 @@ const zodiac_sign_t zodiac_signs[ZODIAC_SIGN_COUNT] = {
 // The Sun's mean motion along the ecliptic, degrees per day.
 #define SUN_DEGREES_PER_DAY 0.9856474
 
+// Month and day of a Unix time on or after 1970 (Hinnant's civil_from_days).
+static void _civil_date(int64_t t, uint8_t *month, uint8_t *day) {
+    int64_t z = t / SECONDS_PER_DAY + 719468;
+    int64_t era = z / 146097;
+    int64_t doe = z - era * 146097;                                        // day of era
+    int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;   // year of era
+    int64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);                 // day of year, from 1 March
+    int64_t mp = (5 * doy + 2) / 153;                                      // month, from March
+    *day = (uint8_t)(doy - (153 * mp + 2) / 5 + 1);
+    *month = (uint8_t)(mp < 10 ? mp + 3 : mp - 9);
+}
+
 static double _sun_longitude(double days) {
     double lon, r;
     sunpos(days, &lon, &r);
@@ -72,12 +84,5 @@ void zodiac_sign_start_date(uint8_t sign, int64_t now, int32_t utc_offset,
         days += rev180(target - _sun_longitude(days)) / SUN_DEGREES_PER_DAY;
     }
 
-    // Local civil date of that instant (civil_from_days, valid after 1970).
-    int64_t local = SUNRISET_EPOCH + (int64_t)floor(days * SECONDS_PER_DAY) + utc_offset;
-    int64_t z = local / SECONDS_PER_DAY + 719468;
-    int64_t era = z / 146097, doe = z - era * 146097;
-    int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    int64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100), mp = (5 * doy + 2) / 153;
-    *day = (uint8_t)(doy - (153 * mp + 2) / 5 + 1);
-    *month = (uint8_t)(mp < 10 ? mp + 3 : mp - 9);
+    _civil_date(SUNRISET_EPOCH + (int64_t)floor(days * SECONDS_PER_DAY) + utc_offset, month, day);
 }

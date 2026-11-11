@@ -24,6 +24,10 @@
 
 // Zodiac signs from the Sun's ecliptic longitude (lib/sunriset). No hardware
 // dependencies, so it also builds on a PC for the host tests in test/.
+//
+// sunpos() is a low-precision model: ingress times come out within about 15
+// minutes, so an ingress that close to local midnight can show the
+// neighbouring date.
 
 #ifndef ZODIAC_H_
 #define ZODIAC_H_
@@ -45,7 +49,11 @@ uint8_t zodiac_sign_at(int64_t now);
 
 // Local month (1-12) and day (1-31) on which the Sun enters `sign`, for the
 // entry nearest to `now` (Unix time, UTC): the current sign's start, a coming
-// sign's next start, or a recent sign's last one. `utc_offset` is in seconds.
+// sign's next start, or a recent sign's last one. For the sign opposite the
+// Sun, half a year either way, which entry is nearest flips around that day.
+// `utc_offset` (seconds) is today's, so in a zone that changes daylight saving
+// before or after the ingress, an ingress within an hour of local midnight
+// can show the neighbouring date.
 void zodiac_sign_start_date(uint8_t sign, int64_t now, int32_t utc_offset,
                             uint8_t *month, uint8_t *day);
 

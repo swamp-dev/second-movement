@@ -1,4 +1,6 @@
+#define _POSIX_C_SOURCE 200809L  // gmtime_r
 #include <string.h>
+#include <time.h>
 
 #include "check.h"
 #include "zodiac.h"
@@ -21,19 +23,20 @@ static int64_t utc(int y, int m, int d, int hh, int mm) {
     return days * DAY + hh * HOUR + mm * MINUTE;
 }
 
-// Local month and day at Unix time t (civil_from_days).
+// Local month and day at Unix time t, from the host C library, so the daily
+// walk checks zodiac.c's own date conversion independently.
 static void local_date(int64_t t, int32_t utc_offset, uint8_t *month, uint8_t *day) {
-    int64_t z = (t + utc_offset) / DAY + 719468;  // t is after 1970, so no negative division
-    int64_t era = z / 146097, doe = z - era * 146097;
-    int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    int64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100), mp = (5 * doy + 2) / 153;
-    *day = (uint8_t)(doy - (153 * mp + 2) / 5 + 1);
-    *month = (uint8_t)(mp < 10 ? mp + 3 : mp - 9);
+    time_t local = (time_t)(t + utc_offset);
+    struct tm tm;
+    gmtime_r(&local, &tm);
+    *month = (uint8_t)(tm.tm_mon + 1);
+    *day = (uint8_t)tm.tm_mday;
 }
 
 // Published equinox and solstice times (UTC), where the Sun enters Aries,
-// Cancer, Libra and Capricorn. The solar formulas are good to a few minutes, so
-// check the sign 20 minutes either side.
+// Cancer, Libra and Capricorn. sunpos() leaves out nutation and aberration, and
+// for these six it puts the ingress 1 to 14 minutes off (13.2 for March 2026),
+// so check the sign 20 minutes either side.
 static void test_sign_flips_at_equinoxes_and_solstices(void) {
     const struct {
         int64_t at;
@@ -72,6 +75,13 @@ static void test_start_date_is_local(void) {
     check_start(LIBRA, october_2026, EASTERN_DAYLIGHT, 9, 22, "Libra 2026, New York");
     check_start(LIBRA, october_2026, 0, 9, 23, "Libra 2026, UTC");
     check_start(CANCER, utc(2028, 7, 1, 16, 0), EASTERN_DAYLIGHT, 6, 20, "Cancer 2028, New York");
+    // East of UTC the local date can be a day later: 2026-12-21 20:50 UTC is
+    // 22 December in Auckland (+13) and Kiritimati (+14).
+    int64_t january_2027 = utc(2027, 1, 5, 0, 0);
+    check_start(CAPRICORN, january_2027, 13 * HOUR, 12, 22, "Capricorn 2026, Auckland");
+    check_start(CAPRICORN, january_2027, 14 * HOUR, 12, 22, "Capricorn 2026, Kiritimati");
+    check_start(CAPRICORN, january_2027, 9 * HOUR, 12, 22, "Capricorn 2026, Tokyo");
+    check_start(CAPRICORN, january_2027, 0, 12, 21, "Capricorn 2026, UTC");
 }
 
 // A browsed sign shows its ingress nearest to now: past for the signs just
