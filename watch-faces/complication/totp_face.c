@@ -36,7 +36,6 @@
 #include <string.h>
 #include "totp_face.h"
 #include "watch.h"
-#include "watch_utility.h"
 #include "TOTP.h"
 #include "base32.h"
 
@@ -45,35 +44,33 @@
 #endif
 
 typedef struct {
-    char* labels;
-    char* name;
+    const char* labels;
     hmac_alg algorithm;
     uint32_t period;
     size_t encoded_key_length;
     unsigned char *encoded_key;
 } totp_t;
 
+#define CREDENTIAL(label, key_array, algo, timestep) \
+    (const totp_t) { \
+        .encoded_key = ((unsigned char *) key_array), \
+        .encoded_key_length = sizeof(key_array) - 1, \
+        .period = (timestep), \
+        .labels = (#label), \
+        .algorithm = (algo), \
+    }
+
 ////////////////////////////////////////////////////////////////////////////////
 // Enter your TOTP key data below
 
+#if __has_include("totp_face.secrets.h")
+#include "totp_face.secrets.h"
+#else
 static totp_t credentials[] = {
-    {
-        .labels = "MS",
-        .name = "MSJ",
-        .encoded_key = (unsigned char *)"NSJHWJEHBHCBSJHD2",
-        .encoded_key_length = strlen("NSJHWJEHBHCBSJHD2"),
-        .algorithm = SHA1,
-        .period = 30
-    },
-    {
-        .labels = "SL",
-        .name = "SLA",
-        .encoded_key = (unsigned char *)"JHBSJKAHDBE@BIe2h",
-        .encoded_key_length = strlen("JHBSJKAHDBE@BIe2h"),
-        .algorithm = SHA1,
-        .period = 30
-    },
+    CREDENTIAL(2F, "JBSWY3DPEHPK3PXP", SHA1, 30),
+    CREDENTIAL(AAC, "JBSWY3DPEHPK3PXP", SHA1, 30),
 };
+#endif
 
 // END OF KEY DATA.
 ////////////////////////////////////////////////////////////////////////////////
@@ -128,12 +125,13 @@ static void totp_generate(totp_state_t *totp_state) {
 
 static void totp_display_error(totp_state_t *totp_state) {
     totp_t *totp = totp_current(totp_state);
-
-    watch_display_text_with_fallback(WATCH_POSITION_TOP, totp->name, totp->labels);
+    watch_clear_display();
+    watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, totp->labels, totp->labels);
     watch_display_text(WATCH_POSITION_BOTTOM, "ERROR");
 }
 
 static void totp_display_code(totp_state_t *totp_state) {
+    char buf[7];
     div_t result;
     uint8_t valid_for;
     totp_t *totp = totp_current(totp_state);
@@ -145,17 +143,14 @@ static void totp_display_code(totp_state_t *totp_state) {
     }
     valid_for = totp->period - result.rem;
 
-    char short_top[5];
-    sprintf(short_top, "%s%2d", totp->labels, valid_for);
-    char long_top[6];
-    sprintf(long_top, "%s%2d", totp->name, valid_for);
+    watch_clear_display();
+    watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, totp->labels, totp->labels);
 
-    char bottom[7];
-    sprintf(bottom, "%06u", totp_state->current_code);
+    sprintf(buf, "%2d", valid_for);
+    watch_display_text(WATCH_POSITION_TOP_RIGHT, buf);
 
-    watch_display_text_with_fallback(WATCH_POSITION_TOP, long_top, short_top);
-    watch_display_text(WATCH_POSITION_BOTTOM, bottom);
-
+    sprintf(buf, "%06u", (unsigned int)totp_state->current_code);
+    watch_display_text(WATCH_POSITION_BOTTOM, buf);
 }
 
 static void totp_display(totp_state_t *totp_state) {
@@ -172,7 +167,7 @@ static void totp_generate_and_display(totp_state_t *totp_state) {
 }
 
 static inline uint32_t totp_compute_base_timestamp() {
-    return watch_utility_date_time_to_unix_time(movement_get_utc_date_time(), 0);
+    return movement_get_utc_timestamp();
 }
 
 void totp_face_setup(uint8_t watch_face_index, void ** context_ptr) {

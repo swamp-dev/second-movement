@@ -17,7 +17,8 @@
 .idea/
 .vs
 .vscode
-docs/
+/docs/*
+!/docs/workflow.md
 *.kicad_sch-bak
 *-backups/
 *.bak

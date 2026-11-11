@@ -166,6 +166,23 @@ lis2dw_mode_t lis2dw_get_mode(void) {
 #endif
 }
 
+// returns the output data rate (ODR) in Hz
+float lis2dw_get_data_rate_hz(void) {
+    switch (lis2dw_get_data_rate()) {
+        case LIS2DW_DATA_RATE_LOWEST:
+            return (lis2dw_get_mode() == LIS2DW_MODE_HIGH_PERFORMANCE) ? 12.5f : 1.6f;
+        case LIS2DW_DATA_RATE_12_5_HZ:    return 12.5f;
+        case LIS2DW_DATA_RATE_25_HZ:      return 25.0f;
+        case LIS2DW_DATA_RATE_50_HZ:      return 50.0f;
+        case LIS2DW_DATA_RATE_100_HZ:     return 100.0f;
+        case LIS2DW_DATA_RATE_200_HZ:     return 200.0f;
+        case LIS2DW_DATA_RATE_HP_400_HZ:  return 400.0f;
+        case LIS2DW_DATA_RATE_HP_800_HZ:  return 800.0f;
+        case LIS2DW_DATA_RATE_HP_1600_HZ: return 1600.0f;
+        default:                          return 0.0f;
+    }
+}
+
 void lis2dw_set_low_power_mode(lis2dw_low_power_mode_t mode) {
 #ifdef I2C_SERCOM
     uint8_t val = watch_i2c_read8(LIS2DW_ADDRESS, LIS2DW_REG_CTRL1) & ~(0b11);
@@ -284,8 +301,20 @@ bool lis2dw_read_fifo(lis2dw_fifo_t *fifo_data) {
 
     fifo_data->count = temp & LIS2DW_FIFO_SAMPLE_COUNT;
 
-    for(int i = 0; i < fifo_data->count; i++) {
-        fifo_data->readings[i] = lis2dw_get_raw_reading();
+    /* The count field can report up to 63, but readings[] only holds 32.
+       Clamp so a glitched or overrun count can't overflow the buffer. */
+    if (fifo_data->count > 32) {
+        fifo_data->count = 32;
+    }
+
+    /* Read the whole FIFO in one burst. With address auto-increment (IF_ADD_INC)
+       the pointer walks OUT_X_L..OUT_Z_H and rolls over into the next FIFO slot,
+       so count*6 bytes returns the samples back-to-back. On this little-endian
+       target the raw bytes map straight onto lis2dw_reading_t (x, y, z int16). */
+    if (fifo_data->count > 0) {
+        uint8_t reg = LIS2DW_REG_OUT_X_L | 0x80;
+        watch_i2c_send(LIS2DW_ADDRESS, &reg, 1);
+        watch_i2c_receive(LIS2DW_ADDRESS, (uint8_t *) fifo_data->readings, fifo_data->count * 6);
     }
 
     return overrun;
@@ -299,6 +328,20 @@ void lis2dw_clear_fifo(void) {
 #ifdef I2C_SERCOM
     watch_i2c_write8(LIS2DW_ADDRESS, LIS2DW_REG_FIFO_CTRL, LIS2DW_FIFO_CTRL_MODE_OFF);
     watch_i2c_write8(LIS2DW_ADDRESS, LIS2DW_REG_FIFO_CTRL, LIS2DW_FIFO_CTRL_MODE_COLLECT_AND_STOP | LIS2DW_FIFO_CTRL_FTH);
+#endif
+}
+
+void lis2dw_enable_double_tap(void) {
+#ifdef I2C_SERCOM
+    uint8_t configuration = watch_i2c_read8(LIS2DW_ADDRESS, LIS2DW_REG_WAKE_UP_THS);
+    watch_i2c_write8(LIS2DW_ADDRESS, LIS2DW_REG_WAKE_UP_THS, configuration | LIS2DW_WAKE_UP_THS_ENABLE_DOUBLE_TAP);
+#endif
+}
+
+void lis2dw_disable_double_tap(void) {
+#ifdef I2C_SERCOM
+    uint8_t configuration = watch_i2c_read8(LIS2DW_ADDRESS, LIS2DW_REG_WAKE_UP_THS);
+    watch_i2c_write8(LIS2DW_ADDRESS, LIS2DW_REG_WAKE_UP_THS, configuration & ~LIS2DW_WAKE_UP_THS_ENABLE_DOUBLE_TAP);
 #endif
 }
 
@@ -345,6 +388,26 @@ void lis2dw_configure_6d_threshold(uint8_t threshold) {
     watch_i2c_write8(LIS2DW_ADDRESS, LIS2DW_REG_TAP_THS_X, configuration | ((threshold & 0b11) << 5));
 #else
     (void)threshold;
+#endif
+}
+
+// duration is a 4-bit value (0-15)
+void lis2dw_configure_sleep_duration(uint8_t duration) {
+#ifdef I2C_SERCOM
+    uint8_t configuration = watch_i2c_read8(LIS2DW_ADDRESS, LIS2DW_REG_WAKE_UP_DUR) & 0b11110000;
+    watch_i2c_write8(LIS2DW_ADDRESS, LIS2DW_REG_WAKE_UP_DUR, configuration | (duration & 0b00001111));
+#else
+    (void)duration;
+#endif
+}
+
+// duration is a 2-bit value (0-3)
+void lis2dw_configure_wake_duration(uint8_t duration) {
+#ifdef I2C_SERCOM
+    uint8_t configuration = watch_i2c_read8(LIS2DW_ADDRESS, LIS2DW_REG_WAKE_UP_DUR) & 0b10011111;
+    watch_i2c_write8(LIS2DW_ADDRESS, LIS2DW_REG_WAKE_UP_DUR, configuration | ((duration & 0b11) << 5));
+#else
+    (void)duration;
 #endif
 }
 
@@ -397,6 +460,33 @@ void lis2dw_configure_int2(uint8_t sources) {
 #endif
 }
 
+void lis2dw12_int_notification_set(lis2dw12_lir_t val) {
+#ifdef I2C_SERCOM
+    uint8_t configuration = watch_i2c_read8(LIS2DW_ADDRESS, LIS2DW_REG_CTRL3);
+    if (val == LIS2DW12_INT_LATCHED) {
+        configuration |= LIS2DW_CTRL3_VAL_LIR;
+    } else {
+        configuration &= ~LIS2DW_CTRL7_VAL_DRDY_PULSED;
+    }
+    watch_i2c_write8(LIS2DW_ADDRESS, LIS2DW_REG_CTRL3, configuration);
+#else
+    (void)val;
+#endif
+}
+
+lis2dw12_lir_t lis2dw12_int_notification_get(void) {
+#ifdef I2C_SERCOM
+    uint8_t configuration = watch_i2c_read8(LIS2DW_ADDRESS, LIS2DW_REG_CTRL3);
+    if (configuration & LIS2DW12_INT_LATCHED) {
+        return LIS2DW12_INT_LATCHED;
+    } else {
+        return LIS2DW12_INT_PULSED;
+    }
+#else
+    return LIS2DW12_INT_PULSED;
+#endif
+}
+
 void lis2dw_enable_interrupts(void) {
 #ifdef I2C_SERCOM
     uint8_t configuration = watch_i2c_read8(LIS2DW_ADDRESS, LIS2DW_REG_CTRL7);
@@ -408,6 +498,20 @@ void lis2dw_disable_interrupts(void) {
 #ifdef I2C_SERCOM
     uint8_t configuration = watch_i2c_read8(LIS2DW_ADDRESS, LIS2DW_REG_CTRL7);
     watch_i2c_write8(LIS2DW_ADDRESS, LIS2DW_REG_CTRL7, configuration & ~LIS2DW_CTRL7_VAL_INTERRUPTS_ENABLE);
+#endif
+}
+
+void lis2dw_pulsed_drdy_interrupts(void) {
+#ifdef I2C_SERCOM
+    uint8_t configuration = watch_i2c_read8(LIS2DW_ADDRESS, LIS2DW_REG_CTRL7);
+    watch_i2c_write8(LIS2DW_ADDRESS, LIS2DW_REG_CTRL7, configuration | LIS2DW_CTRL7_VAL_DRDY_PULSED);
+#endif
+}
+
+void lis2dw_latched_drdy_interrupts(void) {
+#ifdef I2C_SERCOM
+    uint8_t configuration = watch_i2c_read8(LIS2DW_ADDRESS, LIS2DW_REG_CTRL7);
+    watch_i2c_write8(LIS2DW_ADDRESS, LIS2DW_REG_CTRL7, configuration & ~LIS2DW_CTRL7_VAL_DRDY_PULSED);
 #endif
 }
 
@@ -430,6 +534,24 @@ lis2dw_interrupt_source_t lis2dw_get_interrupt_source(void) {
 uint8_t lis2dw_get_wakeup_threshold(void) {
 #ifdef I2C_SERCOM
     return watch_i2c_read8(LIS2DW_ADDRESS, LIS2DW_REG_WAKE_UP_THS) & 0b00111111;
+#else
+    return 0;
+#endif
+}
+
+// value is in units of 512 / ODR seconds (0 means 16 / ODR)
+uint8_t lis2dw_get_sleep_duration(void) {
+#ifdef I2C_SERCOM
+    return watch_i2c_read8(LIS2DW_ADDRESS, LIS2DW_REG_WAKE_UP_DUR) & 0b00001111;
+#else
+    return 0;
+#endif
+}
+
+// value is in units of 1 / ODR seconds
+uint8_t lis2dw_get_wake_duration(void) {
+#ifdef I2C_SERCOM
+    return (watch_i2c_read8(LIS2DW_ADDRESS, LIS2DW_REG_WAKE_UP_DUR) >> 5) & 0b11;
 #else
     return 0;
 #endif
