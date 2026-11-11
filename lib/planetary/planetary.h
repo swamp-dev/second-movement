@@ -66,9 +66,16 @@ bool planetary_hour_at(int64_t now, int32_t utc_offset, double latitude, double 
 // The planetary hour `steps` hours after *from (before it when negative),
 // counted by hour number, so every step lands on the next or previous hour
 // whatever their length. *from must come from planetary_hour_at() or this
-// function with the same place and offset; *out may be the same struct.
+// function for the same place; *out may be the same struct.
 // Returns false, leaving *out unchanged, when a step reaches polar day or night.
 bool planetary_hour_step(const planetary_hour_t *from, int steps, int32_t utc_offset,
                          double latitude, double longitude, planetary_hour_t *out);
+
+// What a face browsing planetary hours shows: the hour `steps` hours from the
+// one containing `now`. *changes_at is when that answer next changes, the end
+// of the hour containing `now`, after which it is the following hour, for any
+// `steps`. Returns false, leaving both outputs unchanged, on polar day or night.
+bool planetary_hour_from_now(int64_t now, int steps, int32_t utc_offset, double latitude,
+                             double longitude, planetary_hour_t *out, int64_t *changes_at);
 
 #endif // PLANETARY_H_

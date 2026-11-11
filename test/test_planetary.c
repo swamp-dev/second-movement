@@ -230,6 +230,11 @@ static void test_step_forward_short_and_long_hours(void) {
     CHECK_EQ_INT(s.hour_number, 6, "three presses from hour 3");
     CHECK_EQ_INT(s.ruler, JUPITER, "three presses from hour 3, the one clock hours skipped");
 
+    // What the face showed before #5: the hour containing now + 3 clock hours.
+    planetary_hour_t clock;
+    CHECK(at(&new_york, local_time(2026, 12, 15, 9, 40, new_york.offset) + 3 * 3600, &clock));
+    CHECK(clock.hour_number != s.hour_number);
+
     // Two days forward from there, across sunsets, midnights and sunrises.
     check_presses(&new_york, local_time(2026, 12, 15, 9, 40, new_york.offset), +1, 48);
 }
@@ -281,6 +286,60 @@ static void test_step_into_polar_day(void) {
     CHECK(memcmp(&out, &untouched, sizeof out) == 0);
 }
 
+// And backward into polar night: Tromso's first sunrise after it is on about
+// 15 January 2026.
+static void test_step_back_into_polar_night(void) {
+    planetary_hour_t h, out;
+    CHECK(at(&tromso, local_time(2026, 1, 20, 12, 0, tromso.offset), &h));
+    memset(&out, 0xAB, sizeof out);
+    planetary_hour_t untouched = out;
+    CHECK(!step(&tromso, &h, -24 * 10, &out));
+    CHECK(memcmp(&out, &untouched, sizeof out) == 0);
+}
+
+static bool from_now(const place_t *p, int64_t now, int steps, planetary_hour_t *h, int64_t *changes_at) {
+    return planetary_hour_from_now(now, steps, p->offset, p->lat, p->lon, h, changes_at);
+}
+
+// The face's view while browsing: `steps` planetary hours from the current one,
+// not `steps` clock hours from now (#5), and it changes exactly when the
+// current hour ends, keeping the same offset.
+static void test_from_now_follows_the_current_hour(void) {
+    const place_t new_york = places[0];
+    const int offsets[] = {0, 3, -5, 30, -30};
+    for (int i = 0; i < 5; i++) {
+        int k = offsets[i];
+        int64_t t = local_time(2026, 12, 15, 9, 40, new_york.offset);
+        planetary_hour_t cur, want, got, later;
+        int64_t changes_at;
+        CHECK(at(&new_york, t, &cur));
+        CHECK(step(&new_york, &cur, k, &want));
+        CHECK(from_now(&new_york, t, k, &got, &changes_at));
+        CHECK(memcmp(&got, &want, sizeof got) == 0);
+        CHECK_EQ_INT(changes_at, cur.end, "offset %d: changes when the current hour ends", k);
+
+        // Unchanged until then: a second before the end gives the same answer.
+        CHECK(from_now(&new_york, changes_at - 1, k, &later, &changes_at));
+        CHECK(memcmp(&later, &want, sizeof later) == 0);
+
+        // At the end it moves on by exactly one hour, to the same offset from the new current hour.
+        CHECK(from_now(&new_york, cur.end, k, &later, &changes_at));
+        CHECK(step(&new_york, &want, 1, &want));
+        CHECK(memcmp(&later, &want, sizeof later) == 0);
+    }
+}
+
+static void test_from_now_polar(void) {
+    planetary_hour_t h;
+    int64_t changes_at = 12345;
+    memset(&h, 0xAB, sizeof h);
+    planetary_hour_t untouched = h;
+    CHECK(!from_now(&tromso, local_time(2026, 6, 21, 12, 0, tromso.offset), 0, &h, &changes_at));
+    CHECK(!from_now(&tromso, local_time(2026, 5, 15, 12, 0, tromso.offset), 24 * 10, &h, &changes_at));
+    CHECK(memcmp(&h, &untouched, sizeof h) == 0);
+    CHECK_EQ_INT(changes_at, 12345, "changes_at untouched");
+}
+
 static void test_table_strings(void) {
     for (int i = 0; i < PLANETARY_PLANET_COUNT; i++) {
         CHECK_EQ_INT(strlen(planetary_planets[i].name), 5, "name of planet %d", i);
@@ -303,6 +362,9 @@ int main(void) {
     test_step_everywhere();
     test_step_many_equals_repeated_single();
     test_step_into_polar_day();
+    test_step_back_into_polar_night();
+    test_from_now_follows_the_current_hour();
+    test_from_now_polar();
     test_table_strings();
     return check_summary("test_planetary");
 }
