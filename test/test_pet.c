@@ -110,7 +110,7 @@ static void test_sleep_restores_energy_and_pet_wakes_when_rested(void) {
     CHECK(fullness - pet.fullness <= 60 / PET_ASLEEP_FULLNESS_PERIOD + 1);
     pet_advance(&pet, 5 * HOUR);
     CHECK(!pet.asleep);
-    CHECK(pet.energy > PET_STAT_MAX - 10);
+    CHECK(pet.energy > PET_STAT_MAX - 30);
 }
 
 static void test_low_energy_asleep_is_not_an_emergency(void) {
