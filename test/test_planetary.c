@@ -363,10 +363,20 @@ static void test_from_now_polar(void) {
     int64_t changes_at = 12345;
     memset(&h, 0xAB, sizeof h);
     planetary_hour_t untouched = h;
+    // The current hour itself is polar: there is no end to report.
     CHECK(!from_now(&tromso, local_time(2026, 6, 21, 12, 0, tromso.offset), 0, &h, &changes_at));
-    CHECK(!from_now(&tromso, local_time(2026, 5, 15, 12, 0, tromso.offset), 24 * 10, &h, &changes_at));
     CHECK(memcmp(&h, &untouched, sizeof h) == 0);
-    CHECK_EQ_INT(changes_at, 12345, "changes_at untouched");
+    CHECK_EQ_INT(changes_at, 12345, "changes_at untouched when the current hour is polar");
+
+    // The current hour is fine but the browsed one is polar. The answer can only
+    // change when the current hour ends, so the face must retry then, not an
+    // hour later (#7).
+    int64_t t = local_time(2026, 5, 15, 12, 0, tromso.offset);
+    planetary_hour_t cur;
+    CHECK(at(&tromso, t, &cur));
+    CHECK(!from_now(&tromso, t, 24 * 10, &h, &changes_at));
+    CHECK(memcmp(&h, &untouched, sizeof h) == 0);
+    CHECK_EQ_INT(changes_at, cur.end, "browsed hour polar: changes when the current hour ends");
 }
 
 static void test_table_strings(void) {
