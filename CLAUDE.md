@@ -16,6 +16,7 @@ how a ticket becomes a merged PR. Read it before starting work.
 | `movement_faces.h`, `watch-faces.mk`, `movement_config.h` | Face registration (see [Adding a face](#adding-a-face)) |
 | `watch-library/shared/watch/` | Hardware API (`watch_slcd.h` for the display, `watch_rtc.h`, …) |
 | `lib/` | Shared helpers (`sunriset`, `TOTP`, `base32`, …) |
+| `test/` | Host unit tests (`make -C test`, see [Testing](#testing)) |
 | `filesystem/`, `location/` | Stored settings and the shared location editor |
 | `template/` | Face template and the `watch_face.py` generator |
 | `gossamer/`, `littlefs/`, `tinyusb/`, `utz/` | Git submodules. Never edit them. |
@@ -62,19 +63,20 @@ A firmware build worked if it ends with the `size` table and
 
 ## CI commands
 
-`.github/workflows/build.yml` builds firmware and simulator for 4 boards ×
-2 displays. The local mirror is:
+`.github/workflows/build.yml` runs the host unit tests (`host-tests`) and
+builds firmware and simulator for 4 boards × 2 displays. The local mirror is:
 
 ```bash
-scripts/ci-local.sh                         # full matrix, 16 builds: the PR gate
-scripts/ci-local.sh sensorwatch_red custom  # one combination, for iterating
+scripts/ci-local.sh                         # host tests + 16 builds: the PR gate
+scripts/ci-local.sh sensorwatch_red custom  # host tests + one combination, for iterating
+make -C test                                # host tests only
 ```
 
-The script enters the nix shell on its own, wipes `build/` and `build-sim/`,
-and stops at the first failing build. There's no lint step, and no unit
-tests until #15 lands. Local builds use the flake's GCC 14, while hosted CI
-uses the older GCC in its `mbed-os-env:latest` image. GCC 14 is stricter, so
-a local pass and a hosted pass are separate checks, and both are required.
+The script enters the nix shell on its own, runs the host tests first, wipes
+`build/` and `build-sim/`, and stops at the first failure. There's no lint
+step. Local builds use the flake's GCC 14, while hosted CI uses the older
+GCC in its `mbed-os-env:latest` image. GCC 14 is stricter, so a local pass
+and a hosted pass are separate checks, and both are required.
 
 ## Adding a face
 
@@ -141,7 +143,12 @@ run `make install`, or copy `build/firmware.uf2` onto `WATCHBOOT`.
 
 ## Testing
 
-There's no test framework yet, so `scripts/ci-local.sh` is the gate. What to
-check for each kind of change is in
-[`docs/workflow.md` § Testing](docs/workflow.md#testing). #15 adds
-host-compiled unit tests; update both files when it lands.
+Pure logic lives in `lib/` and is unit-tested on the PC by `make -C test`
+(plain `cc`, no ARM toolchain). To add a test, write `test/test_<name>.c`
+using the `CHECK` macros in `test/check.h`, and end its `main` with
+`return check_summary("test_<name>");`. Then add `test_<name>` to `TESTS`
+and its sources to `test_<name>_SRCS` in `test/Makefile`. A new
+`lib/<dir>` also needs `-I../lib/<dir>` in that file's `CPPFLAGS`, and its
+`-I` and `.c` lines in the root `Makefile`. Tests build with
+AddressSanitizer and UBSan, and any failure fails the run. What to check for
+each kind of change is in [`docs/workflow.md` § Testing](docs/workflow.md#testing).

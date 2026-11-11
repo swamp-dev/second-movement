@@ -3,47 +3,12 @@
 #include "zodiac_face.h"
 #include "watch.h"
 #include "watch_utility.h"
+#include "zodiac.h"
 
-// Zodiac signs and their start dates (month and day)
-static const struct {
-    const char *name;
-    int8_t start_month;
-    int8_t start_day;
-    const char *abbreviation;
-} zodiac_signs[] = {
-    {"Aquar", 1, 20, "AQ"},
-    {"Pisce", 2, 19, "PI"},
-    {"Aries", 3, 21, "AR"},
-    {"Tauru", 4, 20, "TA"},
-    {"Gemin", 5, 21, "GE"},
-    {"Cance", 6, 21, "CN"},
-    {"Leo  ", 7, 23, "LE"},
-    {"Virgo", 8, 23, "VI"},
-    {"Libra", 9, 23, "LI"},
-    {"Scorp", 10, 23, "SC"},
-    {"Sagit", 11, 22, "SA"},
-    {"Capri", 12, 22, "CR"},
-};
-
-#define ZODIAC_SIGN_COUNT (sizeof(zodiac_signs) / sizeof(zodiac_signs[0]))
-
-// Function to determine the current zodiac sign based on the current date
+// Index of the sign in effect on today's local date.
 static int8_t get_current_zodiac_sign(void) {
     watch_date_time_t now = movement_get_local_date_time();
-    int8_t month = now.unit.month;
-    int8_t day = now.unit.day;
-
-    for (size_t i = 0; i < ZODIAC_SIGN_COUNT; i++) {
-        uint8_t start_month = zodiac_signs[i].start_month;
-        uint8_t start_day = zodiac_signs[i].start_day;
-
-        if ((month < start_month) || (month == start_month && day < start_day)) {
-            return (i == 0) ? (ZODIAC_SIGN_COUNT - 1) : (i - 1);
-        }
-    }
-
-    // Date is past the last sign's start — return the last sign (Capricorn)
-    return ZODIAC_SIGN_COUNT - 1;
+    return zodiac_sign_for_date(now.unit.month, now.unit.day);
 }
 
 void zodiac_face_setup(uint8_t watch_face_index, void **context_ptr) {

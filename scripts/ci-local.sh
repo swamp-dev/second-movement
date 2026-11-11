@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Local mirror of .github/workflows/build.yml: builds the firmware (make) and
-# the simulator (emmake make) for every board x display combination.
+# Local mirror of .github/workflows/build.yml: runs the host unit tests
+# (make -C test), then builds the firmware (make) and the simulator
+# (emmake make) for every board x display combination.
 #
 #   scripts/ci-local.sh                         # full matrix (the PR gate)
 #   scripts/ci-local.sh sensorwatch_red custom  # one combination
@@ -56,6 +57,9 @@ run() { # run <label> <command...>
     exit 1
   fi
 }
+
+# Host unit tests (the host-tests job): plain C with the PC's compiler.
+run "host-tests" make -C test
 
 for board in "${boards[@]}"; do
   for display in "${displays[@]}"; do
