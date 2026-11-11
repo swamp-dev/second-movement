@@ -29,17 +29,30 @@ over the open backlog and pauses after each ticket.
 
 This adapts `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`; where they differ, this list wins.
 
-1. **Code review.** Run the `code-reviewer` subagent on the diff. If the
+1. **Tests for the logic.** Every change to behaviour comes with host unit
+   tests for its logic in the same PR (see [Testing](#testing)). A bug fix
+   starts with a test that fails, committed before the fix; give that
+   commit's SHA in the PR. If the logic sits in a face, move it into a pure
+   function in `lib/` so it can be tested. Only the wiring left in the face
+   (`watch_*` and `movement_*` calls) may go without a host test, and the
+   Test plan says what was left untested and why.
+2. **Simulator check.** Every change to a face, or to code a face uses,
+   is checked in the simulator before the PR opens: drive the screens and
+   buttons the change affects, and record the steps and what you saw in the
+   Test plan. If you can't drive a browser, say so and open a `manual-task`
+   issue for the check. Changes that no face uses (CI, docs, tests only)
+   say "Simulator: N/A" and why.
+3. **Code review.** Run the `code-reviewer` subagent on the diff. If the
    diff touches `*.md`, `docs/` or `.claude/`, also run `docs-reviewer`.
-2. **Address findings.** Fix every critical and significant finding. List
+4. **Address findings.** Fix every critical and significant finding. List
    any minor ones you don't fix in the PR body.
-3. **Run all CI jobs locally:** `scripts/ci-local.sh`, which runs the host
+5. **Run all CI jobs locally:** `scripts/ci-local.sh`, which runs the host
    unit tests and builds the firmware and simulator for every board ×
    display. Every combination must pass, and a single-combination run
    doesn't count.
-4. **Apply fixes** for any local failure. If a fix touches behaviour the
+6. **Apply fixes** for any local failure. If a fix touches behaviour the
    review didn't cover, restart from step 1.
-5. **Re-review when the fixes were substantial**, meaning any of:
+7. **Re-review when the fixes were substantial**, meaning any of:
    - new files since the first review;
    - more than 50 net lines added since then;
    - a new non-`static` function, or a changed signature for
@@ -47,6 +60,8 @@ This adapts `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`; where they 
    - a fix in an area the first review flagged as critical or significant.
 
 The PR body records what ran under a **Per-PR checklist** heading:
+- the tests added, and the SHA of the failing-test commit for a bug fix;
+- the simulator check (or N/A, or the `manual-task` issue);
 - which reviewers ran (`code-reviewer`, plus `docs-reviewer` when
   triggered) and which findings were addressed;
 - `scripts/ci-local.sh` (full matrix): `all combinations passed` at
@@ -64,13 +79,13 @@ current head or hand the PR to the user.
 
 ## Testing
 
-- **Pure logic** (time, astronomy, zodiac, packing and unpacking): TDD with
-  host unit tests (`make -C test`; how to add one is in
+- **Pure logic** (time, astronomy, zodiac, packing and unpacking,
+  refresh and expiry decisions): TDD with host unit tests (`make -C test`; how to add one is in
   [`CLAUDE.md` § Testing](../CLAUDE.md#testing)). Put the logic in a pure
   function with no `watch_*` or `movement_*` calls.
-- **Display, buttons and face flow:** check in the simulator
-  (`emmake make …`, see `CLAUDE.md`) and describe what you checked in the
-  PR. If you can't drive a browser, say so in the Test plan and leave the
+- **Display, buttons and face flow:** always check in the simulator
+  (`emmake make …`, see `CLAUDE.md`), including for fixes whose logic is
+  host-tested, and describe what you checked in the PR. If you can't drive a browser, say so in the Test plan and leave the
   check to the user in a `manual-task` issue.
 - **On-watch behaviour** (power, sleep, sensors, real time passing): an
   agent can't check this. Before opening the PR, open a `manual-task` issue
