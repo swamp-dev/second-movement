@@ -59,6 +59,8 @@ void zodiac_face_setup(uint8_t watch_face_index, void **context_ptr) {
 }
 
 void zodiac_face_activate(void *context) {
+    if (watch_sleep_animation_is_running()) watch_stop_sleep_animation();
+
     zodiac_face_state_t *state = (zodiac_face_state_t *)context;
 
     if (state->current_sign_index == -1) {

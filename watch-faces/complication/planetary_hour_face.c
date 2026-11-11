@@ -543,6 +543,8 @@ void planetary_hour_face_setup(__attribute__((unused)) uint8_t watch_face_index,
 // Function to activate the planetary face, initializing planetary hour and zodiac sign
 void planetary_hour_face_activate(void *context)
 {
+    if (watch_sleep_animation_is_running()) watch_stop_sleep_animation();
+
     planetary_hour_state_t *state = (planetary_hour_state_t *)context;
     // Initialize the location_state
     state->hour_offset = 0;
