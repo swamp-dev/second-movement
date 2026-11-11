@@ -281,6 +281,16 @@ static void _planetary_hour_face_display(const planetary_hour_t *hour, int32_t u
     watch_display_text(WATCH_POSITION_BOTTOM, buf);
 }
 
+// A message in place of an hour. The whole top row and the hour's colon and PM
+// indicator are overwritten, so nothing of a previously shown hour remains (#10).
+static void _planetary_hour_face_display_message(const char *message, const char *fallback)
+{
+    watch_clear_colon();
+    watch_clear_indicator(WATCH_INDICATOR_PM);
+    watch_display_text_with_fallback(WATCH_POSITION_TOP, "PHour ", "PH");
+    watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, message, fallback);
+}
+
 // Shows the planetary hour hour_offset planetary hours from the current one,
 // and refreshes when the current hour ends, when the shown one moves on too.
 static void _planetary_hour_face_update(planetary_hour_state_t *state)
@@ -290,8 +300,7 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
     if (!_planetary_hour_face_location(state, &lat, &lon))
     {
         state->shown_valid = false;
-        watch_display_text_with_fallback(WATCH_POSITION_TOP, "PHour ", "PH");
-        watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, "No LOC", "No Loc");
+        _planetary_hour_face_display_message("No LOC", "No Loc");
         return;
     }
 
@@ -304,8 +313,7 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
     {
         // Polar day or night lasts days, so retry hourly instead of on every tick.
         state->refresh_at = (uint32_t)(now + 3600);
-        watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "PHour", "PH");
-        watch_display_text(WATCH_POSITION_BOTTOM, "None  ");
+        _planetary_hour_face_display_message("None  ", "None  ");
         return;
     }
 
