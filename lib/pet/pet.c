@@ -162,9 +162,13 @@ static void set_mood(pet_screen_t *screen, const char *top, const char *fallback
 }
 
 void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, pet_screen_t *screen) {
-    // Only letters a 7-segment digit draws well: no I, K, M, V, W or X.
-    static const char *const action_names[PET_ACTION_COUNT] = {"FEEd  ", "PLAY  ", "bEd   ", "StAtUS"};
-    static const char *const stage_names[] = {"EGG", "bAb", "AdU", "AGE"};
+    // Text is limited to what both LCDs draw legibly. No I, K, M, V, W or X
+    // on the bottom line. On the classic LCD, bottom characters 0 and 2 can't
+    // show a letter that lights the top bar without the bottom one or the
+    // reverse (F, P, b, d, Y), and the second top character is cruder still
+    // (no G). test_pet.c checks every screen against those rules.
+    static const char *const action_names[PET_ACTION_COUNT] = {" FEEd ", " PLAY ", " bEd  ", "StAtUS"};
+    static const char *const stage_names[] = {"EGG", "CH", "Ad", "AGE"};
     const bool alive = is_hatched_and_alive(pet);
     const uint32_t age_days = pet->age_minutes / (24 * 60);
 
@@ -172,7 +176,7 @@ void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, pe
     screen->sleep = alive && pet->asleep;
 
     if (pet->stage == PET_STAGE_DEAD) set_mood(screen, "RIP  ", "RI");
-    else if (pet->stage == PET_STAGE_EGG) set_mood(screen, "EGG  ", "EG");
+    else if (pet->stage == PET_STAGE_EGG) set_mood(screen, "EGG  ", "O ");
     else if (pet->asleep || page == PET_PAGE_DOZE) set_mood(screen, "SLEEP", "SL");
     else if (pet->fullness <= PET_STAT_CRITICAL) set_mood(screen, "HUNGr", "HU");
     else if (pet->energy <= PET_STAT_CRITICAL) set_mood(screen, "tIrEd", "tI");
@@ -193,7 +197,7 @@ void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, pe
             else if ((unsigned)action < PET_ACTION_COUNT) strcpy(screen->bottom, action_names[action]);
             break;
         case PET_PAGE_FULLNESS:
-            label_and_value(screen->bottom, "Fd", pet->fullness);
+            label_and_value(screen->bottom, "EA", pet->fullness);
             break;
         case PET_PAGE_HAPPINESS:
             label_and_value(screen->bottom, "HA", pet->happiness);

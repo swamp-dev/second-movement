@@ -311,6 +311,13 @@ static void check_screen(const pet_state_t *pet, pet_action_t action, pet_page_t
     CHECK(strlen(s.top) == 5); // always all 5, so a shorter mood leaves nothing behind
     CHECK(strlen(s.top_fallback) == 2);
     CHECK(strlen(s.bottom) == 6);
+    // The classic LCD ties the top and bottom segments of bottom characters 0
+    // and 2 together, so only these draw there (the display code swaps in
+    // look-alikes for A, L, t and U).
+    CHECK(strchr(" ACEGHLOSUnort0123456789", s.bottom[0]) != NULL);
+    CHECK(strchr(" ACEGHLOSUnort0123456789", s.bottom[2]) != NULL);
+    // ...and its second top character has too few segments for most letters.
+    CHECK(strchr(" AEHILORU", s.top_fallback[1]) != NULL);
 }
 #define CHECK_SCREEN(pet, action, page, top, fallback, bottom) \
     check_screen(pet, action, page, top, fallback, bottom, __LINE__)
@@ -318,20 +325,20 @@ static void check_screen(const pet_state_t *pet, pet_action_t action, pet_page_t
 static void test_render_moods(void) {
     pet_state_t pet;
     pet_init(&pet, T0);
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "EGG  ", "EG", "FEEd  ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "EGG  ", "O ", " FEEd ");
 
     pet = baby();
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "HAPPY", "HA", "FEEd  ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "HAPPY", "HA", " FEEd ");
     pet.happiness = PET_STAT_CONTENT - 1;
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "COOL ", "CO", "FEEd  ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "COOL ", "CO", " FEEd ");
     pet.happiness = PET_STAT_CRITICAL;
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SAd  ", "SA", "FEEd  ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SAd  ", "SA", " FEEd ");
     pet.energy = PET_STAT_CRITICAL;
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "tIrEd", "tI", "FEEd  ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "tIrEd", "tI", " FEEd ");
     pet.fullness = PET_STAT_CRITICAL;
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "HUNGr", "HU", "FEEd  ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "HUNGr", "HU", " FEEd ");
     pet.asleep = true;
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SLEEP", "SL", "FEEd  ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SLEEP", "SL", " FEEd ");
     pet.stage = PET_STAGE_DEAD;
     pet.asleep = false;
     CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "RIP  ", "RI", "AGE  0");
@@ -342,33 +349,33 @@ static void test_render_bottom_line(void) {
     pet.fullness = 100;
     pet.happiness = 7;
     pet.energy = 42;
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SAd  ", "SA", "FEEd  ");
-    CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_ACTION, "SAd  ", "SA", "PLAY  ");
-    CHECK_SCREEN(&pet, PET_ACTION_LIGHTS, PET_PAGE_ACTION, "SAd  ", "SA", "bEd   ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SAd  ", "SA", " FEEd ");
+    CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_ACTION, "SAd  ", "SA", " PLAY ");
+    CHECK_SCREEN(&pet, PET_ACTION_LIGHTS, PET_PAGE_ACTION, "SAd  ", "SA", " bEd  ");
     pet.asleep = true; // the lights action names what it would do now
     CHECK_SCREEN(&pet, PET_ACTION_LIGHTS, PET_PAGE_ACTION, "SLEEP", "SL", "GEt UP");
     pet.asleep = false;
     CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_ACTION, "SAd  ", "SA", "StAtUS");
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_FULLNESS, "SAd  ", "SA", "Fd 100");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_FULLNESS, "SAd  ", "SA", "EA 100");
     CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_HAPPINESS, "SAd  ", "SA", "HA   7");
     CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_ENERGY, "SAd  ", "SA", "En  42");
     CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_REFUSED, "SAd  ", "SA", "  no  ");
 
     pet.age_minutes = 2 * 24 * 60 + 500;
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "SAd  ", "SA", "bAb  2");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "SAd  ", "SA", "CH   2");
     pet.stage = PET_STAGE_ADULT;
     pet.age_minutes = 45 * 24 * 60;
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "SAd  ", "SA", "AdU 45");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "SAd  ", "SA", "Ad  45");
     pet.age_minutes = UINT32_MAX;
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "SAd  ", "SA", "AdU999");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "SAd  ", "SA", "Ad 999");
     pet.stage = PET_STAGE_DEAD;
     CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_FULLNESS, "RIP  ", "RI", "AGE999");
 
     pet_init(&pet, T0);
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "EGG  ", "EG", "EGG  0");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "EGG  ", "O ", "EGG  0");
     // An out-of-range action or page still yields well-formed strings.
-    CHECK_SCREEN(&pet, PET_ACTION_COUNT, PET_PAGE_ACTION, "EGG  ", "EG", "      ");
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, (pet_page_t)99, "EGG  ", "EG", "      ");
+    CHECK_SCREEN(&pet, PET_ACTION_COUNT, PET_PAGE_ACTION, "EGG  ", "O ", "      ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, (pet_page_t)99, "EGG  ", "O ", "      ");
 }
 
 static void test_render_doze_and_indicators(void) {

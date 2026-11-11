@@ -39,8 +39,9 @@
  * LIGHT        next action: FEEd, PLAY, bEd (GEt UP while asleep), StAtUS
  * ALARM        do it. The bottom line then shows the stat it changed, or
  *              "no" if the pet won't (full, too tired, asleep...). On StAtUS,
- *              each press shows the next of Fd, HA, En (0-100) and the life
- *              stage with the age in days.
+ *              each press shows the next of EA (how well fed), HA (happiness)
+ *              and En (energy), each 0-100, then the life stage (EGG, CH
+ *              for child, Ad for adult) with the age in days.
  * LIGHT (long) light the LED
  * ALARM (long) on the RIP screen only: hatch a new egg
  *
