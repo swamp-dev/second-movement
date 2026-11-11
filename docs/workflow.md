@@ -38,15 +38,17 @@ This adapts `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`; where they 
    since CI judges only the head. Display text and button-to-screen flow
    need no host test: item 2 covers them, and the Test plan says so. Changes
    with no logic change (docs, CI, comments, renames) record "Tests: N/A"
-   and why.
+   and why. When unsure whether logic is trivial, write the test.
 2. **Simulator check.** Every change under `watch-faces/`, to
-   `movement*.{c,h}`, or to `lib/`, `filesystem/` or `location/` code a
-   built face calls is checked in the simulator before the PR opens. Drive
+   `movement*.{c,h}`, or to `lib/`, `filesystem/`, `location/` or
+   `watch-library/` code a built face calls is checked in the simulator before the PR opens. Drive
    the screens and buttons the change affects (for shared code, a face
    that calls it, named), and record the steps and what you saw in the Test
    plan. Build-system, CI, docs and test-only changes record
    "Simulator: N/A". An agent should always be able to do this check; if it
-   can't, open a `manual-task` issue for it and link it from the Test plan.
+   can't, open a `manual-task` issue for it, labelled `priority:high` since
+   the merged code is unchecked until it's done, and link it from the Test
+   plan. That issue satisfies this item for the merge gate.
 3. **Code review.** Run the `code-reviewer` subagent on the diff. If the
    diff touches `*.md`, `docs/` or `.claude/`, also run `docs-reviewer`.
 4. **Address findings.** Fix every critical and significant finding. If a
@@ -91,10 +93,10 @@ to the user.
 
 ## Testing
 
-- **Pure logic** (time, astronomy, zodiac, packing and unpacking, when a
-  face should refresh): TDD with host unit tests (`make -C test`; how to
-  add one is in [`CLAUDE.md` § Testing](../CLAUDE.md#testing)). Put the
-  logic in a pure function with no `watch_*` or `movement_*` calls.
+- **Logic** ([checklist item 1](#per-pr-checklist-mandatory) says which):
+  TDD with host unit tests (`make -C test`; how to add one is in
+  [`CLAUDE.md` § Testing](../CLAUDE.md#testing)). Put the logic in a pure
+  function with no `watch_*` or `movement_*` calls.
 - **Display, buttons and face flow:** check in the simulator
   (`emmake make …`, see `CLAUDE.md`), as the
   [Per-PR checklist](#per-pr-checklist-mandatory) requires.
@@ -124,7 +126,8 @@ These PRs always go to the user to merge, even when every condition holds:
 - **Gate-introducing PRs:** changes to this doc, `CLAUDE.md`'s CI commands
   or Testing sections, `scripts/ci-local.sh`, `test/check.h`,
   `test/Makefile` (except adding a `test_<name>` to `TESTS` with its
-  `test_<name>_SRCS`, or a `-I../lib/<dir>` line, which are routine),
+  `test_<name>_SRCS`, or a `-I../lib/<dir>` line, which are routine, as
+  are the root `Makefile` lines for a new `lib/<dir>`),
   anything under `.claude/`, or `.github/workflows/`.
 - Submodule pointer bumps (`gossamer`, `littlefs`, `tinyusb`, `utz`).
 - Upstream syncs from `joeycastillo/second-movement`.
