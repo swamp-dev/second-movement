@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2025 Your Name
+ * Copyright (c) 2025 second-movement contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -28,7 +28,7 @@
 #include "movement.h"
 
 typedef struct {
-    int8_t current_sign_index; // Index of the current zodiac sign
+    uint8_t current_sign_index; // Index of the current zodiac sign
 } zodiac_face_state_t;
 
 void zodiac_face_setup(uint8_t watch_face_index, void **context_ptr);

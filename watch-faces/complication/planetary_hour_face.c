@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2025 Your Name
+ * Copyright (c) 2025 second-movement contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -254,29 +254,21 @@ static void _planetary_hour_face_display(const planetary_hour_t *hour, int32_t u
     char buf[14];
     planetary_planet_t ruler = planetary_planets[hour->ruler];
     // Shown to the nearest minute, as sunrise_sunset_face rounds sunrise.
-    watch_date_time_t display_time = watch_utility_date_time_from_unix_time((uint32_t)(hour->start + 30), utc_offset);
+    watch_date_time_t disp = watch_utility_date_time_from_unix_time((uint32_t)(hour->start + 30), utc_offset);
 
     watch_set_colon();
     if (movement_clock_mode_24h())
+    {
         watch_set_indicator(WATCH_INDICATOR_24H);
-    if (!movement_clock_mode_24h())
-    {
-        watch_date_time_t disp = display_time;
-        if (watch_utility_convert_to_12_hour(&disp))
-            watch_set_indicator(WATCH_INDICATOR_PM);
-        else
-            watch_clear_indicator(WATCH_INDICATOR_PM);
-    }
-    else
-    {
         watch_clear_indicator(WATCH_INDICATOR_PM);
     }
+    else if (watch_utility_convert_to_12_hour(&disp))
+        watch_set_indicator(WATCH_INDICATOR_PM);
+    else
+        watch_clear_indicator(WATCH_INDICATOR_PM);
 
     watch_display_text_with_fallback(WATCH_POSITION_TOP, ruler.name, ruler.abbreviation);
 
-    watch_date_time_t disp = display_time;
-    if (!movement_clock_mode_24h())
-        (void)watch_utility_convert_to_12_hour(&disp);
     sprintf(buf, "%2d%02d%2d", disp.unit.hour, disp.unit.minute, disp.unit.day);
     watch_display_text(WATCH_POSITION_BOTTOM, buf);
 }
@@ -348,16 +340,20 @@ void planetary_hour_face_setup(__attribute__((unused)) uint8_t watch_face_index,
     if (*context_ptr == NULL)
     {
         *context_ptr = malloc(sizeof(planetary_hour_state_t));
+        if (*context_ptr == NULL)
+            return;
         memset(*context_ptr, 0, sizeof(planetary_hour_state_t));
     }
 }
 
-// Function to activate the planetary face, initializing planetary hour and zodiac sign
+// Resets browsing and the location editor; the first EVENT_ACTIVATE shows the current hour.
 void planetary_hour_face_activate(void *context)
 {
     if (watch_sleep_animation_is_running()) watch_stop_sleep_animation();
 
     planetary_hour_state_t *state = (planetary_hour_state_t *)context;
+    if (state == NULL) // setup's malloc failed; the loop shows the error
+        return;
     // Initialize the location_state
     state->hour_offset = 0;
     state->longLatToUse = 0;
@@ -384,12 +380,12 @@ bool planetary_hour_face_loop(movement_event_t event, void *context)
 {
     planetary_hour_state_t *state = (planetary_hour_state_t *)context;
 
-    // Check if the context is null to avoid dereferencing a null pointer
+    // setup's malloc failed: show it, but let MODE still leave the face
     if (state == NULL)
     {
         watch_display_text(WATCH_POSITION_TOP, "Error");
         watch_display_text(WATCH_POSITION_BOTTOM, "Error");
-        return false;
+        return movement_default_loop_handler(event);
     }
 
     switch (event.event_type)
@@ -518,6 +514,8 @@ bool planetary_hour_face_loop(movement_event_t event, void *context)
 void planetary_hour_face_resign(void *context)
 {
     planetary_hour_state_t *state = (planetary_hour_state_t *)context;
+    if (state == NULL) // setup's malloc failed; MODE can now leave the face
+        return;
     state->location_state.page = 0;
     state->location_state.active_digit = 0;
     state->hour_offset = 0;
