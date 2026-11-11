@@ -33,9 +33,11 @@ static char PET_SAVE_FILE[] = "pet.bin";
 static void _save(pet_face_state_t *state) {
     uint8_t buf[PET_SAVE_SIZE];
     pet_serialize(&state->pet, buf);
-    // Only a successful write counts as saved; after a failed one the next
-    // pet_should_save check tries again.
-    if (filesystem_write_file(PET_SAVE_FILE, (char *)buf, sizeof(buf))) state->saved = state->pet;
+    filesystem_write_file(PET_SAVE_FILE, (char *)buf, sizeof(buf));
+    // Counts as saved even if the write failed (say, the filesystem is full):
+    // otherwise pet_should_save would stay true and retry on every tick. The
+    // next change or save interval tries again.
+    state->saved = state->pet;
 }
 
 // Brings the pet up to the present and saves it if enough has changed.
@@ -160,6 +162,17 @@ bool pet_face_loop(movement_event_t event, void *context) {
     }
 
     return true;
+}
+
+// Called by Movement every minute, whichever face is showing and in
+// low-energy mode too. This is what keeps the pet living in real time when
+// nobody is looking, and what makes a longer gap mean "the clock was set".
+movement_watch_face_advisory_t pet_face_advise(void *context) {
+    pet_face_state_t *state = (pet_face_state_t *)context;
+    movement_watch_face_advisory_t advisory = {0};
+
+    if (state->has_pet) _catch_up(state);
+    return advisory;
 }
 
 void pet_face_resign(void *context) {

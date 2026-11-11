@@ -28,22 +28,27 @@
 /*
  * VIRTUAL PET
  *
- * A pet that lives on the watch. It hatches from an egg, grows from baby to
+ * A pet that lives on the watch. It hatches from an egg, grows from child to
  * adult, and gets hungry, bored and tired as real time passes, whether or
- * not this face is showing. Ignore it for too long and it dies.
+ * not this face is showing (the watch updates it every minute). Left with a
+ * critical stat for a day, it dies. If the clock jumps forward, the pet ages
+ * 12 hours at most.
  *
- * The top line is its mood (HAPPY, COOL, HUNGr, tIrEd, SAd, SLEEP, EGG, RIP).
- * The bell indicator means a stat is critical; the sleep indicator means the
- * pet is asleep.
+ * The top line is its mood (HAPPY, COOL, HUNGr, tIrEd, SAd, SLEEP, EGG, RIP;
+ * on the classic LCD the first two letters, and O for the egg). The bell
+ * indicator means a stat is critical; the sleep indicator (custom LCD only)
+ * means the pet is asleep. In low-energy mode the face reads SLEEP.
  *
  * LIGHT        next action: FEEd, PLAY, bEd (GEt UP while asleep), StAtUS
- * ALARM        do it. The bottom line then shows the stat it changed, or
- *              "no" if the pet won't (full, too tired, asleep...). On StAtUS,
+ * ALARM        do it. The bottom line then shows the stat it changed (after
+ *              bEd, the action becomes GEt UP), or "no" if the pet won't
+ *              (full, too tired, asleep...). On StAtUS,
  *              each press shows the next of EA (how well fed), HA (happiness)
  *              and En (energy), each 0-100, then the life stage (EGG, CH
  *              for child, Ad for adult) with the age in days.
  * LIGHT (long) light the LED
- * ALARM (long) on the RIP screen only: hatch a new egg
+ * ALARM (long) on the RIP screen only: hatch a new egg. RIP shows AGE and
+ *              the days lived; short presses do nothing there.
  *
  * The rules and every rate live in lib/pet/pet.h.
  */
@@ -63,13 +68,14 @@ void pet_face_setup(uint8_t watch_face_index, void **context_ptr);
 void pet_face_activate(void *context);
 bool pet_face_loop(movement_event_t event, void *context);
 void pet_face_resign(void *context);
+movement_watch_face_advisory_t pet_face_advise(void *context);
 
 #define pet_face ((const watch_face_t){ \
     pet_face_setup, \
     pet_face_activate, \
     pet_face_loop, \
     pet_face_resign, \
-    NULL, \
+    pet_face_advise, \
 })
 
 #endif // PET_FACE_H_

@@ -476,6 +476,39 @@ static void test_unreadable_saves_are_rejected(void) {
     CHECK(memcmp(&pet, &untouched, sizeof(pet)) == 0);
 }
 
+// "State survives a reset": a pet restored from its save file and caught up
+// to the clock is the pet that never stopped running, as long as the save is
+// younger than the catch-up cap. The face saves often enough for that.
+static void test_reload_then_catch_up_equals_never_resetting(void) {
+    CHECK(PET_SAVE_INTERVAL_SECONDS < PET_MAX_CATCHUP_SECONDS);
+
+    pet_state_t running = baby();
+    pet_advance_to(&running, T0 + 3 * HOUR + 41);
+    pet_apply_action(&running, PET_ACTION_FEED);
+
+    uint8_t file[PET_SAVE_SIZE];
+    pet_serialize(&running, file);
+
+    const uint32_t later = T0 + 3 * HOUR + 41 + PET_SAVE_INTERVAL_SECONDS + 1234;
+    for (uint32_t t = running.last_update + 60; t <= later; t += 60) pet_advance_to(&running, t);
+    pet_advance_to(&running, later);
+
+    pet_state_t reloaded;
+    CHECK(pet_deserialize(file, sizeof(file), &reloaded));
+    pet_advance_to(&reloaded, later);
+    CHECK(same(&running, &reloaded));
+}
+
+// Updated every minute (what the face's advise hook does), a neglected pet
+// dies on schedule: about 8 h to go hungry plus 24 h critical.
+static void test_minute_by_minute_neglect_kills_within_two_days(void) {
+    pet_state_t pet = baby();
+    uint32_t now = T0;
+    while (pet.stage != PET_STAGE_DEAD && now < T0 + 72 * HOUR) pet_advance_to(&pet, now += 60);
+    CHECK_EQ_INT(pet.stage, PET_STAGE_DEAD, "after neglect");
+    CHECK(now - T0 > 31 * HOUR && now - T0 <= 32 * HOUR);
+}
+
 static void test_should_save(void) {
     const pet_state_t saved = baby();
     pet_state_t pet = saved;
@@ -524,6 +557,8 @@ int main(void) {
     test_save_round_trip();
     test_save_layout_is_fixed();
     test_unreadable_saves_are_rejected();
+    test_reload_then_catch_up_equals_never_resetting();
+    test_minute_by_minute_neglect_kills_within_two_days();
     test_should_save();
     return check_summary("test_pet");
 }

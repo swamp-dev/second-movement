@@ -62,13 +62,16 @@
 // Minutes in a row spent needing attention before the pet dies.
 #define PET_DEATH_MINUTES (24 * 60)
 
-// Longest stretch one update will live through. A clock set far forward (or
-// a long time away) ages the pet by this much at most. It is shorter than
+// Longest stretch one update will live through. The face updates the pet
+// every minute, so a bigger gap means the clock was set forward or the watch
+// lost power, and the pet ages by this much at most. It is shorter than
 // PET_DEATH_MINUTES, so a single time-set can't kill a pet that was fine.
 #define PET_MAX_CATCHUP_SECONDS (12UL * 60 * 60)
 
-// Save again once this much time has passed since the last save.
-#define PET_SAVE_INTERVAL_SECONDS (60UL * 60)
+// Save again once this much time has passed since the last save. Shorter
+// than PET_MAX_CATCHUP_SECONDS, so a pet reloaded after a reset catches up
+// exactly; long enough to cost only a few flash writes a day.
+#define PET_SAVE_INTERVAL_SECONDS (6UL * 60 * 60)
 
 // ---- State ----
 
@@ -100,7 +103,7 @@ bool pet_needs_attention(const pet_state_t *pet);
 
 // Lives through elapsed_seconds (at most PET_MAX_CATCHUP_SECONDS). Returns
 // true if at least one whole minute was counted, i.e. the state may differ.
-// Advancing by a then by b gives the same state as advancing by a + b.
+// Within the cap, advancing by a then by b gives the same state as by a + b.
 bool pet_advance(pet_state_t *pet, uint32_t elapsed_seconds);
 
 // Advances to the UTC time `now`. A clock set backward counts as no time
@@ -138,7 +141,8 @@ typedef enum {
 
 // The page to show after ALARM performed `action` (applied = what
 // pet_apply_action returned) while `page` was showing: the stat the action
-// changed, the next status page, or the refusal.
+// changed, the next status page, the action name again (lights), or the
+// refusal.
 pet_page_t pet_page_after_action(pet_action_t action, bool applied, pet_page_t page);
 
 typedef struct {
