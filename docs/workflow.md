@@ -16,7 +16,7 @@ Build, toolchain and face-registration details are in
 |---|---|---|
 | 1 | Worktree and branch off the latest `origin/main`, then read the ticket in full and claim it | `/start-ticket <N>` |
 | 2 | Implement it (see [Testing](#testing)) | manual |
-| 3 | Run the per-PR checklist below (`/finish-ticket` doesn't cover its first two items), then open the PR | `/finish-ticket` |
+| 3 | Run the per-PR checklist below (`/finish-ticket` doesn't cover checklist items 1–2), then open the PR | `/finish-ticket` |
 | 4 | Wait for hosted CI to go green: the `host-tests` job and every `build` and `build-simulator` job of the `Build` workflow, for both the push run and the pull_request run | `gh pr checks <P>` |
 | 5 | Merge and clean up, or hand the PR to the user (see [Merge authority](#merge-authority)) | `/ship-ticket <P>` |
 
@@ -75,18 +75,18 @@ Update that section every time you push a new head.
 This repo has no stamp file. Instead of asking the user, `/ship-ticket`
 step 3 checks it itself: merge only if **this session** confirmed item 1
 (the tests exist, and the failing-test SHA is recorded for a bug fix), ran
-items 2–7, and the recorded SHA equals the PR's `headRefOid`. If not (for example, a
-new session after `/handoff` or `/resume`), re-run the checklist on the
-current head or hand the PR to the user.
+items 2–7, and the recorded SHA equals the PR's `headRefOid`. If not (for
+example, a new session after `/handoff` or `/resume`), re-run the checklist
+on the current head or hand the PR to the user.
 
 ---
 
 ## Testing
 
 - **Pure logic** (time, astronomy, zodiac, packing and unpacking, when a
-  face should refresh): TDD with host unit tests (`make -C test`; how to add
-  one is in [`CLAUDE.md` § Testing](../CLAUDE.md#testing)). Put the logic in a pure
-  function with no `watch_*` or `movement_*` calls.
+  face should refresh): TDD with host unit tests (`make -C test`; how to
+  add one is in [`CLAUDE.md` § Testing](../CLAUDE.md#testing)). Put the
+  logic in a pure function with no `watch_*` or `movement_*` calls.
 - **Display, buttons and face flow:** check in the simulator
   (`emmake make …`, see `CLAUDE.md`), as the
   [Per-PR checklist](#per-pr-checklist-mandatory) requires.
