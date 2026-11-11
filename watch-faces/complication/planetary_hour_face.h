@@ -27,13 +27,16 @@
 
 #include "movement.h"
 #include "location.h"
+#include "planetary.h"
 
 typedef struct {
     uint8_t current_planetary_hour;
     uint8_t current_zodiac_sign;
     uint8_t longLatToUse;            
-    int16_t hour_offset;   // 0 = current hour, +1 = next hour, -1 = previous hour, etc.
-    watch_date_time_t hour_offset_expires;
+    int16_t hour_offset;   // planetary hours from the current one: 0 = current, +1 = next, -1 = previous, etc.
+    bool shown_valid;      // `shown` holds the planetary hour on the display
+    planetary_hour_t shown;  // the current planetary hour moved by hour_offset hours
+    uint32_t refresh_at;   // Unix time to recompute: when the current planetary hour ends
     location_state_t location_state; 
 } planetary_hour_state_t;
 
