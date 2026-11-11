@@ -514,6 +514,8 @@ bool planetary_hour_face_loop(movement_event_t event, void *context)
 void planetary_hour_face_resign(void *context)
 {
     planetary_hour_state_t *state = (planetary_hour_state_t *)context;
+    if (state == NULL) // setup's malloc failed; MODE can now leave the face
+        return;
     state->location_state.page = 0;
     state->location_state.active_digit = 0;
     state->hour_offset = 0;
