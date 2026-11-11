@@ -160,8 +160,8 @@ bool planetary_hour_from_now(int64_t now, int steps, int32_t utc_offset, double 
                              double longitude, planetary_hour_t *out, int64_t *changes_at) {
     planetary_hour_t current, h;
     if (!planetary_hour_at(now, utc_offset, latitude, longitude, &current)) return false;
+    *changes_at = current.end;
     if (!planetary_hour_step(&current, steps, utc_offset, latitude, longitude, &h)) return false;
     *out = h;
-    *changes_at = current.end;
     return true;
 }
