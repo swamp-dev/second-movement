@@ -130,6 +130,30 @@ static void test_polar_day_and_night(void) {
     CHECK(memcmp(&h, &untouched, sizeof h) == 0);
 }
 
+// The days #10 reproduced an uninitialized read on: Tromso's first or last day
+// with a sunrise, whose neighbouring day has none. Every 10 minutes of each day
+// either has no planetary hour, leaving *out alone, or one that contains the
+// instant and has sane bounds. Build with clang -fsanitize=memory to check that
+// nothing uninitialized is read (see the PR for #10).
+static void test_tromso_days_next_to_polar(void) {
+    static const int days[][2] = {{1, 15}, {5, 17}, {7, 26}, {11, 27}};
+    for (size_t i = 0; i < sizeof days / sizeof days[0]; i++) {
+        for (int minute = 0; minute < 24 * 60; minute += 10) {
+            int64_t t = local_time(2026, days[i][0], days[i][1], minute / 60, minute % 60, tromso.offset);
+            planetary_hour_t h, untouched;
+            memset(&h, 0xAB, sizeof h);
+            untouched = h;
+            if (!at(&tromso, t, &h)) {
+                CHECK(memcmp(&h, &untouched, sizeof h) == 0);
+                continue;
+            }
+            CHECK(h.start <= t && t < h.end);
+            CHECK(h.end - h.start >= 60 && h.end - h.start <= 3 * 3600);
+            CHECK(h.hour_number < 24 && h.ruler < PLANETARY_PLANET_COUNT);
+        }
+    }
+}
+
 // Walks every planetary hour of 2026 and counts the hours that break a rule:
 // the hour contains its own start and midpoint, the next hour starts where it
 // ends with the next hour number and the next ruler, each hour 0 has the ruler
@@ -355,6 +379,7 @@ int main(void) {
     test_reykjavik_midsummer_midnight();
     test_date_line_midday();
     test_polar_day_and_night();
+    test_tromso_days_next_to_polar();
     test_whole_year_everywhere();
     test_whole_year_tromso();
     test_step_forward_short_and_long_hours();
