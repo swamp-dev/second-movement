@@ -281,9 +281,8 @@ static void _planetary_hour_face_display(const planetary_hour_t *hour, int32_t u
     watch_display_text(WATCH_POSITION_BOTTOM, buf);
 }
 
-// Finds the current planetary hour and shows the one hour_offset planetary
-// hours from it. The display next changes when the current hour ends, whatever
-// the offset, since the shown hour then moves on by one too.
+// Shows the planetary hour hour_offset planetary hours from the current one,
+// and refreshes when the current hour ends, when the shown one moves on too.
 static void _planetary_hour_face_update(planetary_hour_state_t *state)
 {
     double lat, lon;
@@ -298,9 +297,9 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
 
     int32_t utc_offset = movement_get_current_timezone_offset();
     int64_t now = (int64_t)movement_get_utc_timestamp();
-    planetary_hour_t current;
-    state->shown_valid = planetary_hour_at(now, utc_offset, lat, lon, &current)
-        && planetary_hour_step(&current, state->hour_offset, utc_offset, lat, lon, &state->shown);
+    int64_t changes_at;
+    state->shown_valid = planetary_hour_from_now(now, state->hour_offset, utc_offset, lat, lon,
+                                                 &state->shown, &changes_at);
     if (!state->shown_valid)
     {
         // Polar day or night lasts days, so retry hourly instead of on every tick.
@@ -310,7 +309,7 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
         return;
     }
 
-    state->refresh_at = (uint32_t)current.end;
+    state->refresh_at = (uint32_t)changes_at;
     _planetary_hour_face_display(&state->shown, utc_offset);
 }
 
