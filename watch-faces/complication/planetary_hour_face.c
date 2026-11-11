@@ -539,6 +539,14 @@ void planetary_hour_face_activate(void *context)
     state->location_state.location_changed = false;
 }
 
+// Leaving the location settings: back to the current hour at the normal 1 Hz tick.
+static void _planetary_hour_face_show_current_hour(planetary_hour_state_t *state)
+{
+    state->hour_offset = 0;
+    movement_request_tick_frequency(1);
+    _planetary_hour_face_update(state);
+}
+
 // Main loop for the planetary face, handling events and updating the display
 bool planetary_hour_face_loop(movement_event_t event, void *context)
 {
@@ -598,7 +606,7 @@ bool planetary_hour_face_loop(movement_event_t event, void *context)
             state->location_state.active_digit = 0;
             state->location_state.page = 0;
             _update_location_register(&state->location_state);
-            _planetary_hour_face_update(state);
+            _planetary_hour_face_show_current_hour(state);
         }
         break;
 
@@ -658,9 +666,12 @@ bool planetary_hour_face_loop(movement_event_t event, void *context)
                     _update_location_register(&state->location_state);
                 }
             }
-            _update_location_settings_display(event, &state->location_state);
-        } 
-        if (state->location_state.page == 0)
+            if (state->location_state.page == 0)
+                _planetary_hour_face_show_current_hour(state); // left settings
+            else
+                _update_location_settings_display(event, &state->location_state);
+        }
+        else
         {
             movement_request_tick_frequency(1);
             state->hour_offset--; // go back one hour
