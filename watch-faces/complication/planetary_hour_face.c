@@ -24,7 +24,9 @@
  * Planetary Hour Face
  * This face calculates and displays the current planetary hour based on the user's location and time.
  * Location can be set with an alarm long press, and the planetary hour is determined by the sunrise and sunset times.
- * Once location is set, short press on the alarm buttom will increment the target hour
+ * Once location is set, a short press on ALARM shows the next planetary hour and, when
+ * there are no location presets, a short press on LIGHT the previous one. Each press
+ * moves by exactly one planetary hour, however long the hours are that day.
  *
  */
 
@@ -228,9 +230,10 @@ static void _planetary_hour_face_advance_digit(planetary_hour_state_t *state)
 }
 
 // --------------- MAIN: Planetary Hour Face (with hour_offset) -----------------
-static void _planetary_hour_face_update(planetary_hour_state_t *state)
+
+// The location in use, in degrees. False when none is set on the watch.
+static bool _planetary_hour_face_location(const planetary_hour_state_t *state, double *lat, double *lon)
 {
-    char buf[14];
     movement_location_t movement_location;
     if (state->longLatToUse == 0 || _location_count <= 1)
         movement_location = load_location_from_filesystem();
@@ -239,38 +242,20 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
         movement_location.bit.latitude = longLatPresets[state->longLatToUse].latitude;
         movement_location.bit.longitude = longLatPresets[state->longLatToUse].longitude;
     }
-
-    // error out if no location is set on the watch or presets
     if (movement_location.reg == 0)
-    {
-        watch_display_text_with_fallback(WATCH_POSITION_TOP, "PHour ", "PH");
-        watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, "No LOC", "No Loc");
-        return;
-    }
+        return false;
+    *lat = (double)(int16_t)movement_location.bit.latitude / 100.0;
+    *lon = (double)(int16_t)movement_location.bit.longitude / 100.0;
+    return true;
+}
 
-    double lat = (double)(int16_t)movement_location.bit.latitude / 100.0;
-    double lon = (double)(int16_t)movement_location.bit.longitude / 100.0;
-    int32_t utc_offset = movement_get_current_timezone_offset();
-
-    // The planetary hour containing the time hour_offset clock hours from now.
-    int64_t now = (int64_t)movement_get_utc_timestamp();
-    int64_t target = now + (int64_t)state->hour_offset * 3600;
-    planetary_hour_t hour;
-    if (!planetary_hour_at(target, utc_offset, lat, lon, &hour))
-    {
-        // Polar day or night lasts days, so retry hourly instead of on every tick.
-        state->hour_offset_expires = watch_utility_date_time_from_unix_time((uint32_t)(now + 3600), utc_offset);
-        watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "PHour", "PH");
-        watch_display_text(WATCH_POSITION_BOTTOM, "None  ");
-        return;
-    }
-
-    planetary_planet_t ruler = planetary_planets[hour.ruler];
+static void _planetary_hour_face_display(const planetary_hour_t *hour, int32_t utc_offset)
+{
+    char buf[14];
+    planetary_planet_t ruler = planetary_planets[hour->ruler];
     // Shown to the nearest minute, as sunrise_sunset_face rounds sunrise.
-    watch_date_time_t display_time = watch_utility_date_time_from_unix_time((uint32_t)(hour.start + 30), utc_offset);
-    state->hour_offset_expires = watch_utility_date_time_from_unix_time((uint32_t)(hour.end + 60), utc_offset);
+    watch_date_time_t display_time = watch_utility_date_time_from_unix_time((uint32_t)(hour->start + 30), utc_offset);
 
-    // ---- DISPLAY ----
     watch_set_colon();
     if (movement_clock_mode_24h())
         watch_set_indicator(WATCH_INDICATOR_24H);
@@ -296,6 +281,54 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
     watch_display_text(WATCH_POSITION_BOTTOM, buf);
 }
 
+// Shows the planetary hour hour_offset planetary hours from the current one,
+// and refreshes when the current hour ends, when the shown one moves on too.
+static void _planetary_hour_face_update(planetary_hour_state_t *state)
+{
+    double lat, lon;
+    // error out if no location is set on the watch or presets
+    if (!_planetary_hour_face_location(state, &lat, &lon))
+    {
+        state->shown_valid = false;
+        watch_display_text_with_fallback(WATCH_POSITION_TOP, "PHour ", "PH");
+        watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, "No LOC", "No Loc");
+        return;
+    }
+
+    int32_t utc_offset = movement_get_current_timezone_offset();
+    int64_t now = (int64_t)movement_get_utc_timestamp();
+    int64_t changes_at;
+    state->shown_valid = planetary_hour_from_now(now, state->hour_offset, utc_offset, lat, lon,
+                                                 &state->shown, &changes_at);
+    if (!state->shown_valid)
+    {
+        // Polar day or night lasts days, so retry hourly instead of on every tick.
+        state->refresh_at = (uint32_t)(now + 3600);
+        watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "PHour", "PH");
+        watch_display_text(WATCH_POSITION_BOTTOM, "None  ");
+        return;
+    }
+
+    state->refresh_at = (uint32_t)changes_at;
+    _planetary_hour_face_display(&state->shown, utc_offset);
+}
+
+// ALARM and LIGHT presses: the next or previous planetary hour, by hour number
+// rather than by clock time, since planetary hours are rarely 60 minutes long.
+static void _planetary_hour_face_step(planetary_hour_state_t *state, int steps)
+{
+    state->hour_offset += steps;
+    double lat, lon;
+    int32_t utc_offset = movement_get_current_timezone_offset();
+    // Stepping from the shown hour costs one lookup per press, however far the
+    // user has browsed; anything else (no hour shown yet, polar) starts afresh.
+    if (state->shown_valid && _planetary_hour_face_location(state, &lat, &lon)
+        && planetary_hour_step(&state->shown, steps, utc_offset, lat, lon, &state->shown))
+        _planetary_hour_face_display(&state->shown, utc_offset);
+    else
+        _planetary_hour_face_update(state);
+}
+
 // Function to set up the planetary face, allocating memory for the context
 void planetary_hour_face_setup(__attribute__((unused)) uint8_t watch_face_index, void **context_ptr)
 {
@@ -315,7 +348,7 @@ void planetary_hour_face_activate(void *context)
     // Initialize the location_state
     state->hour_offset = 0;
     state->longLatToUse = 0;
-    state->hour_offset_expires = movement_get_local_date_time(); // force immediate update
+    state->refresh_at = 0; // force immediate update
 
     movement_location_t movement_location = load_location_from_filesystem();
     state->location_state.working_latitude = _planetary_hour_face_struct_from_latlon(movement_location.bit.latitude);
@@ -360,8 +393,7 @@ bool planetary_hour_face_loop(movement_event_t event, void *context)
             if (event.event_type == EVENT_LOW_ENERGY_UPDATE && !watch_sleep_animation_is_running())
                 watch_start_sleep_animation(1000);
             // check if we need to update the display
-            watch_date_time_t date_time = movement_get_local_date_time();
-            if (date_time.reg >= state->hour_offset_expires.reg)
+            if (movement_get_utc_timestamp() >= state->refresh_at)
             {
                 _planetary_hour_face_update(state);
             }
@@ -404,8 +436,7 @@ bool planetary_hour_face_loop(movement_event_t event, void *context)
         }
         else
         {
-            state->hour_offset++;
-            _planetary_hour_face_update(state);
+            _planetary_hour_face_step(state, 1);
         }
         break;
 
@@ -460,8 +491,7 @@ bool planetary_hour_face_loop(movement_event_t event, void *context)
         else
         {
             movement_request_tick_frequency(1);
-            state->hour_offset--; // go back one hour
-            _planetary_hour_face_update(state);
+            _planetary_hour_face_step(state, -1);
         }
         break;
 

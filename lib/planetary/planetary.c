@@ -140,3 +140,28 @@ bool planetary_hour_at(int64_t now, int32_t utc_offset, double latitude, double 
     out->end = period_start + length * (index + 1) / 12;
     return true;
 }
+
+bool planetary_hour_step(const planetary_hour_t *from, int steps, int32_t utc_offset,
+                         double latitude, double longitude, planetary_hour_t *out) {
+    // Hours are contiguous, so the next one is the hour containing this one's
+    // end, and the previous one the hour containing the second before its start.
+    planetary_hour_t h = *from;
+    for (; steps > 0; steps--) {
+        if (!planetary_hour_at(h.end, utc_offset, latitude, longitude, &h)) return false;
+    }
+    for (; steps < 0; steps++) {
+        if (!planetary_hour_at(h.start - 1, utc_offset, latitude, longitude, &h)) return false;
+    }
+    *out = h;
+    return true;
+}
+
+bool planetary_hour_from_now(int64_t now, int steps, int32_t utc_offset, double latitude,
+                             double longitude, planetary_hour_t *out, int64_t *changes_at) {
+    planetary_hour_t current, h;
+    if (!planetary_hour_at(now, utc_offset, latitude, longitude, &current)) return false;
+    if (!planetary_hour_step(&current, steps, utc_offset, latitude, longitude, &h)) return false;
+    *out = h;
+    *changes_at = current.end;
+    return true;
+}
