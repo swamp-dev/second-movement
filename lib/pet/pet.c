@@ -170,14 +170,14 @@ void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, pe
     screen->bell = pet_needs_attention(pet);
     screen->sleep = alive && pet->asleep;
 
-    if (pet->stage == PET_STAGE_DEAD) set_mood(screen, "RIP", "RI");
-    else if (pet->stage == PET_STAGE_EGG) set_mood(screen, "EGG", "EG");
+    if (pet->stage == PET_STAGE_DEAD) set_mood(screen, "RIP  ", "RI");
+    else if (pet->stage == PET_STAGE_EGG) set_mood(screen, "EGG  ", "EG");
     else if (pet->asleep || page == PET_PAGE_DOZE) set_mood(screen, "SLEEP", "SL");
     else if (pet->fullness <= PET_STAT_CRITICAL) set_mood(screen, "HUNGr", "HU");
     else if (pet->energy <= PET_STAT_CRITICAL) set_mood(screen, "tIrEd", "tI");
-    else if (pet->happiness <= PET_STAT_CRITICAL) set_mood(screen, "SAd", "SA");
+    else if (pet->happiness <= PET_STAT_CRITICAL) set_mood(screen, "SAd  ", "SA");
     else if (pet->fullness >= PET_STAT_CONTENT && pet->happiness >= PET_STAT_CONTENT && pet->energy >= PET_STAT_CONTENT) set_mood(screen, "HAPPY", "HA");
-    else set_mood(screen, "OKAY", "OK");
+    else set_mood(screen, "OKAY ", "OK");
 
     strcpy(screen->bottom, "      ");
     if (page == PET_PAGE_DOZE) return;

@@ -308,7 +308,7 @@ static void check_screen(const pet_state_t *pet, pet_action_t action, pet_page_t
         fprintf(stderr, "%s:%d: screen [%s|%s|%s], expected [%s|%s|%s]\n", __FILE__, line,
                 s.top, s.top_fallback, s.bottom, top, fallback, bottom);
     }
-    CHECK(strlen(s.top) <= 5);
+    CHECK(strlen(s.top) == 5); // always all 5, so a shorter mood leaves nothing behind
     CHECK(strlen(s.top_fallback) == 2);
     CHECK(strlen(s.bottom) == 6);
 }
@@ -318,14 +318,14 @@ static void check_screen(const pet_state_t *pet, pet_action_t action, pet_page_t
 static void test_render_moods(void) {
     pet_state_t pet;
     pet_init(&pet, T0);
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "EGG", "EG", "FEEd  ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "EGG  ", "EG", "FEEd  ");
 
     pet = baby();
     CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "HAPPY", "HA", "FEEd  ");
     pet.happiness = PET_STAT_CONTENT - 1;
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "OKAY", "OK", "FEEd  ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "OKAY ", "OK", "FEEd  ");
     pet.happiness = PET_STAT_CRITICAL;
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SAd", "SA", "FEEd  ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SAd  ", "SA", "FEEd  ");
     pet.energy = PET_STAT_CRITICAL;
     CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "tIrEd", "tI", "FEEd  ");
     pet.fullness = PET_STAT_CRITICAL;
@@ -334,7 +334,7 @@ static void test_render_moods(void) {
     CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SLEEP", "SL", "FEEd  ");
     pet.stage = PET_STAGE_DEAD;
     pet.asleep = false;
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "RIP", "RI", "AGE  0");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "RIP  ", "RI", "AGE  0");
 }
 
 static void test_render_bottom_line(void) {
@@ -342,30 +342,30 @@ static void test_render_bottom_line(void) {
     pet.fullness = 100;
     pet.happiness = 7;
     pet.energy = 42;
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SAd", "SA", "FEEd  ");
-    CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_ACTION, "SAd", "SA", "PLAY  ");
-    CHECK_SCREEN(&pet, PET_ACTION_LIGHTS, PET_PAGE_ACTION, "SAd", "SA", "LIGHtS");
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_ACTION, "SAd", "SA", "StAtUS");
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_FULLNESS, "SAd", "SA", "Fd 100");
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_HAPPINESS, "SAd", "SA", "HA   7");
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_ENERGY, "SAd", "SA", "En  42");
-    CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_REFUSED, "SAd", "SA", "  no  ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SAd  ", "SA", "FEEd  ");
+    CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_ACTION, "SAd  ", "SA", "PLAY  ");
+    CHECK_SCREEN(&pet, PET_ACTION_LIGHTS, PET_PAGE_ACTION, "SAd  ", "SA", "LIGHtS");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_ACTION, "SAd  ", "SA", "StAtUS");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_FULLNESS, "SAd  ", "SA", "Fd 100");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_HAPPINESS, "SAd  ", "SA", "HA   7");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_ENERGY, "SAd  ", "SA", "En  42");
+    CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_REFUSED, "SAd  ", "SA", "  no  ");
 
     pet.age_minutes = 2 * 24 * 60 + 500;
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "SAd", "SA", "bAb  2");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "SAd  ", "SA", "bAb  2");
     pet.stage = PET_STAGE_ADULT;
     pet.age_minutes = 45 * 24 * 60;
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "SAd", "SA", "AdU 45");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "SAd  ", "SA", "AdU 45");
     pet.age_minutes = UINT32_MAX;
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "SAd", "SA", "AdU999");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "SAd  ", "SA", "AdU999");
     pet.stage = PET_STAGE_DEAD;
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_FULLNESS, "RIP", "RI", "AGE999");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_FULLNESS, "RIP  ", "RI", "AGE999");
 
     pet_init(&pet, T0);
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "EGG", "EG", "EGG  0");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "EGG  ", "EG", "EGG  0");
     // An out-of-range action or page still yields well-formed strings.
-    CHECK_SCREEN(&pet, PET_ACTION_COUNT, PET_PAGE_ACTION, "EGG", "EG", "      ");
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, (pet_page_t)99, "EGG", "EG", "      ");
+    CHECK_SCREEN(&pet, PET_ACTION_COUNT, PET_PAGE_ACTION, "EGG  ", "EG", "      ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, (pet_page_t)99, "EGG  ", "EG", "      ");
 }
 
 static void test_render_doze_and_indicators(void) {
@@ -383,7 +383,7 @@ static void test_render_doze_and_indicators(void) {
     CHECK(s.bell && s.sleep);
     pet.stage = PET_STAGE_DEAD;
     pet.asleep = false;
-    CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_DOZE, "RIP", "RI", "      ");
+    CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_DOZE, "RIP  ", "RI", "      ");
     pet_render(&pet, PET_ACTION_FEED, PET_PAGE_DOZE, &s);
     CHECK(!s.bell && !s.sleep);
 }

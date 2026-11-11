@@ -142,7 +142,7 @@ typedef enum {
 pet_page_t pet_page_after_action(pet_action_t action, bool applied, pet_page_t page);
 
 typedef struct {
-    char top[6];          // up to 5 characters, for the custom LCD
+    char top[6];          // 5 characters (space-padded), for the custom LCD
     char top_fallback[3]; // 2 characters, for the classic LCD
     char bottom[7];       // 6 characters
     bool bell;            // needs attention
