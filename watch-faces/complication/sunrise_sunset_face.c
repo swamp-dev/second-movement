@@ -27,13 +27,12 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 #include "sunrise_sunset_face.h"
 #include "watch.h"
 #include "watch_utility.h"
 #include "watch_common_display.h"
 #include "filesystem.h"
-#include "sunriset.h"
+#include "sun_events.h"
 
 #if __EMSCRIPTEN__
 #include <emscripten.h>
@@ -41,15 +40,8 @@
 
 static const uint8_t _location_count = sizeof(longLatPresets) / sizeof(long_lat_presets_t);
 
-static void _sunrise_sunset_set_expiration(sunrise_sunset_face_state_t *state, watch_date_time_t next_rise_set) {
-    uint32_t timestamp = watch_utility_date_time_to_unix_time(next_rise_set, 0);
-    state->rise_set_expires = watch_utility_date_time_from_unix_time(timestamp + 60, 0);
-}
-
 static void _sunrise_sunset_face_update(sunrise_sunset_face_state_t *state) {
     char buf[14];
-    double rise, set, minutes, seconds;
-    bool show_next_match = false;
     movement_location_t movement_location;
     if (state->longLatToUse == 0 || _location_count <= 1)
         movement_location = load_location_from_filesystem();
@@ -59,129 +51,61 @@ static void _sunrise_sunset_face_update(sunrise_sunset_face_state_t *state) {
     }
 
     if (movement_location.reg == 0) {
+        // Activate, the location editor and the preset switch are the only ways
+        // the location can change, and all of them call this function, so ticks
+        // need not re-read it.
+        state->refresh_at = UINT32_MAX;
         watch_display_text_with_fallback(WATCH_POSITION_TOP, "Sunri", "rI");
         watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, "No LOC", "No Loc");
         return;
     }
 
-    watch_date_time_t date_time = movement_get_local_date_time(); // the current local date / time
-    watch_date_time_t scratch_time; // scratchpad, contains different values at different times
-    scratch_time.reg = date_time.reg;
+    double lat = (double)(int16_t)movement_location.bit.latitude / 100.0;
+    double lon = (double)(int16_t)movement_location.bit.longitude / 100.0;
 
-    // Weird quirky unsigned things were happening when I tried to cast these directly to doubles below.
-    // it looks redundant, but extracting them to local int16's seemed to fix it.
-    int16_t lat_centi = (int16_t)movement_location.bit.latitude;
-    int16_t lon_centi = (int16_t)movement_location.bit.longitude;
+    // Events are Unix times, so one that falls on another local day than the
+    // date it was computed for still shows its own day and time (#47).
+    uint32_t now = movement_get_utc_timestamp();
+    sun_event_t next = sun_events_upcoming(now, 0, lat, lon);
+    sun_event_t shown = state->rise_index ? sun_events_upcoming(now, state->rise_index, lat, lon) : next;
+    // Keep showing the next event for a minute after it happens.
+    state->refresh_at = (uint32_t)(next.t + 60);
 
-    double lat = (double)lat_centi / 100.0;
-    double lon = (double)lon_centi / 100.0;
+    // The offset in force on the event's date, which may differ from today's
+    // across a daylight saving change.
+    watch_date_time_t disp = watch_utility_date_time_from_unix_time((uint32_t)shown.t, movement_get_current_timezone_offset());
+    int32_t offset = movement_get_timezone_offset_for_date(disp);
+    // Shown to the nearest minute.
+    disp = watch_utility_date_time_from_unix_time((uint32_t)(shown.t + 30), offset);
 
-    // we loop twice because if it's after sunset today, we need to recalculate to display values for tomorrow.
-    for(int i = 0; i < 2; i++) {
-        double hours_from_utc = ((double)movement_get_timezone_offset_for_date(scratch_time)) / 3600.0;
-        uint8_t result = sun_rise_set(scratch_time.unit.year + WATCH_RTC_REFERENCE_YEAR, scratch_time.unit.month, scratch_time.unit.day, lon, lat, &rise, &set);
+    bool is_rise = shown.kind == SUN_EVENT_RISE || shown.kind == SUN_EVENT_NO_RISE;
+    if (is_rise) watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "RIS", "rI");
+    else watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "SET", "SE");
 
-        if (result != 0) {
-            watch_clear_colon();
-            watch_clear_indicator(WATCH_INDICATOR_PM);
-            watch_clear_indicator(WATCH_INDICATOR_24H);
-            if (result == 1) watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "SET", "SE");
-            else watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "RIS", "rI");
-            sprintf(buf, "%2d", scratch_time.unit.day);
-            watch_display_text(WATCH_POSITION_TOP_RIGHT, buf);
-            watch_display_text(WATCH_POSITION_BOTTOM, "None  ");
-            return;
-        }
-
-        watch_set_colon();
-        if (movement_clock_mode_24h()) watch_set_indicator(WATCH_INDICATOR_24H);
-
-        rise += hours_from_utc;
-        set += hours_from_utc;
-
-        minutes = 60.0 * fmod(rise, 1);
-        seconds = 60.0 * fmod(minutes, 1);
-        scratch_time.unit.hour = floor(rise);
-        if (seconds < 30) scratch_time.unit.minute = floor(minutes);
-        else scratch_time.unit.minute = ceil(minutes);
-
-        // Handle hour overflow from timezone conversion
-        while (scratch_time.unit.hour >= 24) {
-            scratch_time.unit.hour -= 24;
-            // Increment day (this will be handled by the date arithmetic)
-            uint32_t timestamp = watch_utility_date_time_to_unix_time(scratch_time, 0);
-            timestamp += 86400;
-            scratch_time = watch_utility_date_time_from_unix_time(timestamp, 0);
-        }
-
-        if (scratch_time.unit.minute == 60) {
-            scratch_time.unit.minute = 0;
-            scratch_time.unit.hour = (scratch_time.unit.hour + 1) % 24;
-        }
-
-        if (date_time.reg < scratch_time.reg) _sunrise_sunset_set_expiration(state, scratch_time);
-
-        if (date_time.reg < scratch_time.reg || show_next_match) {
-            if (state->rise_index == 0 || show_next_match) {
-                if (!movement_clock_mode_24h()) {
-                    if (watch_utility_convert_to_12_hour(&scratch_time)) watch_set_indicator(WATCH_INDICATOR_PM);
-                    else watch_clear_indicator(WATCH_INDICATOR_PM);
-                }
-                watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "RIS", "rI");
-                sprintf(buf, "%2d", scratch_time.unit.day);
-                watch_display_text(WATCH_POSITION_TOP_RIGHT, buf);
-                sprintf(buf, "%2d%02d%2s", scratch_time.unit.hour, scratch_time.unit.minute,longLatPresets[state->longLatToUse].name);
-                watch_display_text(WATCH_POSITION_BOTTOM, buf);
-                return;
-            } else {
-                show_next_match = true;
-            }
-        }
-
-        minutes = 60.0 * fmod(set, 1);
-        seconds = 60.0 * fmod(minutes, 1);
-        scratch_time.unit.hour = floor(set);
-        if (seconds < 30) scratch_time.unit.minute = floor(minutes);
-        else scratch_time.unit.minute = ceil(minutes);
-
-        // Handle hour overflow from timezone conversion
-        while (scratch_time.unit.hour >= 24) {
-            scratch_time.unit.hour -= 24;
-            // Increment day (this will be handled by the date arithmetic)
-            uint32_t timestamp = watch_utility_date_time_to_unix_time(scratch_time, 0);
-            timestamp += 86400;
-            scratch_time = watch_utility_date_time_from_unix_time(timestamp, 0);
-        }
-
-        if (scratch_time.unit.minute == 60) {
-            scratch_time.unit.minute = 0;
-            scratch_time.unit.hour = (scratch_time.unit.hour + 1) % 24;
-        }
-
-        if (date_time.reg < scratch_time.reg) _sunrise_sunset_set_expiration(state, scratch_time);
-
-        if (date_time.reg < scratch_time.reg || show_next_match) {
-            if (state->rise_index == 0 || show_next_match) {
-                if (!movement_clock_mode_24h()) {
-                    if (watch_utility_convert_to_12_hour(&scratch_time)) watch_set_indicator(WATCH_INDICATOR_PM);
-                    else watch_clear_indicator(WATCH_INDICATOR_PM);
-                }
-                watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "SET", "SE");
-                sprintf(buf, "%2d", scratch_time.unit.day);
-                watch_display_text(WATCH_POSITION_TOP_RIGHT, buf);
-                sprintf(buf, "%2d%02d%2s", scratch_time.unit.hour, scratch_time.unit.minute,longLatPresets[state->longLatToUse].name);
-                watch_display_text(WATCH_POSITION_BOTTOM, buf);
-                return;
-            } else {
-                show_next_match = true;
-            }
-        }
-
-        // it's after sunset. we need to display sunrise/sunset for tomorrow.
-        uint32_t timestamp = watch_utility_date_time_to_unix_time(date_time, 0);
-        timestamp += 86400;
-        scratch_time = watch_utility_date_time_from_unix_time(timestamp, 0);
+    if (shown.kind == SUN_EVENT_NO_RISE || shown.kind == SUN_EVENT_NO_SET) {
+        watch_clear_colon();
+        watch_clear_indicator(WATCH_INDICATOR_PM);
+        watch_clear_indicator(WATCH_INDICATOR_24H);
+        sprintf(buf, "%2d", disp.unit.day);
+        watch_display_text(WATCH_POSITION_TOP_RIGHT, buf);
+        watch_display_text(WATCH_POSITION_BOTTOM, "None  ");
+        return;
     }
+
+    watch_set_colon();
+    if (movement_clock_mode_24h()) {
+        watch_set_indicator(WATCH_INDICATOR_24H);
+        watch_clear_indicator(WATCH_INDICATOR_PM);
+    } else {
+        watch_clear_indicator(WATCH_INDICATOR_24H);
+        // Converting changes only the hour, so the day below is still right.
+        if (watch_utility_convert_to_12_hour(&disp)) watch_set_indicator(WATCH_INDICATOR_PM);
+        else watch_clear_indicator(WATCH_INDICATOR_PM);
+    }
+    sprintf(buf, "%2d", disp.unit.day);
+    watch_display_text(WATCH_POSITION_TOP_RIGHT, buf);
+    sprintf(buf, "%2d%02d%2s", disp.unit.hour, disp.unit.minute, longLatPresets[state->longLatToUse].name);
+    watch_display_text(WATCH_POSITION_BOTTOM, buf);
 }
 
 
@@ -395,8 +319,7 @@ bool sunrise_sunset_face_loop(movement_event_t event, void *context) {
                 // if entering low energy mode, start tick animation
                 if (event.event_type == EVENT_LOW_ENERGY_UPDATE && !watch_sleep_animation_is_running()) watch_start_sleep_animation(1000);
                 // check if we need to update the display
-                watch_date_time_t date_time = movement_get_local_date_time();
-                if (date_time.reg >= state->rise_set_expires.reg) {
+                if (movement_get_utc_timestamp() >= state->refresh_at) {
                     // and on the off chance that this happened before EVENT_TIMEOUT snapped us back to rise/set 0, go back now
                     state->rise_index = 0;
                     _sunrise_sunset_face_update(state);
