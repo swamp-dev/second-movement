@@ -577,34 +577,140 @@ static void test_minute_by_minute_neglect_kills_within_two_days(void) {
 static void test_should_save(void) {
     const pet_state_t saved = baby();
     pet_state_t pet = saved;
-    CHECK(!pet_should_save(&saved, &pet));
+    CHECK(!pet_should_save(&saved, &pet, false));
 
     pet_advance_to(&pet, T0 + PET_SAVE_INTERVAL_SECONDS - 1);
-    CHECK(!pet_should_save(&saved, &pet));
+    CHECK(!pet_should_save(&saved, &pet, false));
     pet_advance_to(&pet, T0 + PET_SAVE_INTERVAL_SECONDS);
-    CHECK(pet_should_save(&saved, &pet));
+    CHECK(pet_should_save(&saved, &pet, false));
 
     pet = saved;
+    pet_advance_to(&pet, T0 + PET_SAVE_MIN_GAP_SECONDS);
     pet.asleep = true;
-    CHECK(pet_should_save(&saved, &pet));
-    pet = saved;
+    CHECK(pet_should_save(&saved, &pet, false));
+    pet.asleep = false;
     pet.stage = PET_STAGE_ADULT;
-    CHECK(pet_should_save(&saved, &pet));
+    CHECK(pet_should_save(&saved, &pet, false));
 
     pet = saved;
     pet_advance_to(&pet, T0 - 1); // clock went backward: keep the new anchor
-    CHECK(pet_should_save(&saved, &pet));
+    CHECK(pet_should_save(&saved, &pet, false));
 
     // Nothing about a dead pet changes with time, so once its death is on
     // file it is never written again.
     pet_state_t dead = saved;
     dead.stage = PET_STAGE_DEAD;
-    CHECK(pet_should_save(&saved, &dead));
+    dead.last_update = T0 + PET_SAVE_MIN_GAP_SECONDS;
+    CHECK(pet_should_save(&saved, &dead, false));
     pet = dead;
     pet_advance_to(&pet, T0 + 10 * PET_SAVE_INTERVAL_SECONDS);
-    CHECK(!pet_should_save(&dead, &pet));
+    CHECK(!pet_should_save(&dead, &pet, false));
     pet_advance_to(&pet, T0 - 1);
-    CHECK(!pet_should_save(&dead, &pet));
+    CHECK(!pet_should_save(&dead, &pet, false));
+}
+
+// A change (an action, bed or get-up, a new stage) is worth a write, but not
+// within PET_SAVE_MIN_GAP_SECONDS of the last one: it waits its turn.
+static void test_a_change_waits_for_the_gap_since_the_last_save(void) {
+    CHECK(PET_SAVE_MIN_GAP_SECONDS < PET_SAVE_INTERVAL_SECONDS);
+
+    const pet_state_t saved = baby();
+    pet_state_t pet = saved;
+
+    // An action right after a save: not yet, then yes.
+    CHECK(pet_should_save(&saved, &pet, true) == false);
+    pet_advance_to(&pet, T0 + PET_SAVE_MIN_GAP_SECONDS - 1);
+    CHECK(!pet_should_save(&saved, &pet, true));
+    pet_advance_to(&pet, T0 + PET_SAVE_MIN_GAP_SECONDS);
+    CHECK(pet_should_save(&saved, &pet, true));
+    // Time alone, with nothing done to the pet, still waits for the interval.
+    CHECK(!pet_should_save(&saved, &pet, false));
+
+    // Sleep and stage changes wait the same way.
+    pet = saved;
+    pet.asleep = true;
+    CHECK(!pet_should_save(&saved, &pet, false));
+    pet_advance_to(&pet, T0 + PET_SAVE_MIN_GAP_SECONDS - 1);
+    CHECK(!pet_should_save(&saved, &pet, false));
+    pet.asleep = false;
+    pet.stage = PET_STAGE_DEAD;
+    CHECK(!pet_should_save(&saved, &pet, false));
+    pet_advance_to(&pet, T0 + PET_SAVE_MIN_GAP_SECONDS);
+    CHECK(pet_should_save(&saved, &pet, false));
+
+    // A clock set backward is saved at once, whatever else is pending.
+    pet = saved;
+    pet_advance_to(&pet, T0 - 1);
+    CHECK(pet_should_save(&saved, &pet, true));
+}
+
+// What the face does on every tick and every ALARM press, with the save
+// file reduced to a counter.
+typedef struct {
+    pet_state_t pet;
+    pet_state_t saved;
+    bool unsaved_action;
+    uint32_t writes;
+} fake_face_t;
+
+#define NO_PRESS PET_ACTION_COUNT
+
+static void fake_face_step(fake_face_t *face, uint32_t now, pet_action_t press) {
+    pet_advance_to(&face->pet, now);
+    if (press != NO_PRESS && pet_apply_action(&face->pet, press)) face->unsaved_action = true;
+    if (pet_should_save(&face->saved, &face->pet, face->unsaved_action)) {
+        face->saved = face->pet;
+        face->unsaved_action = false;
+        face->writes++;
+    }
+}
+
+// bEd / GEt UP applies for as long as the pet isn't fully rested. Pressed
+// once a second for an hour, it must not cost a flash write per press, and
+// the last press must still reach the file.
+static void test_an_hour_of_bed_presses_is_rate_limited_and_nothing_is_lost(void) {
+    fake_face_t face = {.pet = baby()};
+    uint32_t now = T0 + 5 * HOUR; // awake long enough to be tired
+    pet_advance_to(&face.pet, now);
+    face.saved = face.pet;
+
+    const uint32_t presses = 3601; // odd: the pet ends up asleep
+    for (uint32_t i = 0; i < presses; i++) fake_face_step(&face, ++now, PET_ACTION_LIGHTS);
+    CHECK(face.pet.asleep);
+    CHECK(face.writes > 0);
+    CHECK(face.writes <= presses / PET_SAVE_MIN_GAP_SECONDS + 1);
+
+    // The presses stop. Within one gap the file matches the pet.
+    for (uint32_t i = 0; i < PET_SAVE_MIN_GAP_SECONDS; i++) fake_face_step(&face, ++now, NO_PRESS);
+    CHECK(face.saved.asleep);
+    CHECK(!face.unsaved_action);
+    const uint32_t settled = face.writes;
+    for (uint32_t i = 0; i < 10 * PET_SAVE_MIN_GAP_SECONDS; i++) fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, settled, "writes once the presses stop");
+}
+
+// Feeding changes only a stat, so nothing but the face's "unsaved action"
+// note says there is something to write. A feed right after a save waits,
+// then is written once.
+static void test_a_feed_right_after_a_save_is_written_one_gap_later(void) {
+    fake_face_t face = {.pet = baby()};
+    uint32_t now = T0 + 5 * HOUR; // long enough to be hungry
+    pet_advance_to(&face.pet, now);
+    face.saved = face.pet;
+
+    fake_face_step(&face, ++now, PET_ACTION_FEED);
+    CHECK(face.unsaved_action);
+    CHECK_EQ_INT(face.writes, 0, "writes right after the feed");
+
+    for (uint32_t i = 1; i < PET_SAVE_MIN_GAP_SECONDS - 1; i++) fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, 0, "writes just before the gap is up");
+    fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, 1, "writes when the gap is up");
+    CHECK(!face.unsaved_action);
+    CHECK_EQ_INT(face.saved.fullness, face.pet.fullness, "fullness on file");
+
+    for (uint32_t i = 0; i < 10 * PET_SAVE_MIN_GAP_SECONDS; i++) fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, 1, "writes with nothing more done");
 }
 
 int main(void) {
@@ -640,5 +746,8 @@ int main(void) {
     test_reload_then_catch_up_equals_never_resetting();
     test_minute_by_minute_neglect_kills_within_two_days();
     test_should_save();
+    test_a_change_waits_for_the_gap_since_the_last_save();
+    test_an_hour_of_bed_presses_is_rate_limited_and_nothing_is_lost();
+    test_a_feed_right_after_a_save_is_written_one_gap_later();
     return check_summary("test_pet");
 }
