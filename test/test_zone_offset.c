@@ -101,6 +101,47 @@ static void test_standard_time_input(void) {
     CHECK_EQ_INT(zone_offset_at_standard(new_york, at(2026, 11, 1, 1, 0)), -300, "New York autumn, 01:00 standard");
 }
 
+static void test_wall_clock_input(void) {
+    // The offset depends only on the date and time given, not on any "current" one:
+    // noon on 5 April is in summer time whatever the date was before.
+    const uzone_packed_t *new_york = &zone_defns[UTZ_NEW_YORK];
+    CHECK_EQ_INT(zone_offset_at_local(new_york, at(2026, 3, 5, 12, 0)), -300, "New York, 5 March noon");
+    CHECK_EQ_INT(zone_offset_at_local(new_york, at(2026, 4, 5, 12, 0)), -240, "New York, 5 April noon");
+
+    // Clocks go forward at 02:00 on 8 March: 01:59 EST is followed by 03:00 EDT.
+    CHECK_EQ_INT(zone_offset_at_local(new_york, at(2026, 3, 8, 1, 59)), -300, "New York spring, 01:59");
+    CHECK_EQ_INT(zone_offset_at_local(new_york, at(2026, 3, 8, 3, 0)), -240, "New York spring, 03:00");
+    // 02:30 doesn't exist. The winter offset puts it at 07:30 UTC, which is 03:30 EDT.
+    CHECK_EQ_INT(zone_offset_at_local(new_york, at(2026, 3, 8, 2, 30)), -300, "New York spring, 02:30 (skipped)");
+
+    // Clocks go back at 02:00 EDT on 1 November: 01:00 to 01:59 happens twice.
+    CHECK_EQ_INT(zone_offset_at_local(new_york, at(2026, 11, 1, 0, 59)), -240, "New York autumn, 00:59");
+    CHECK_EQ_INT(zone_offset_at_local(new_york, at(2026, 11, 1, 1, 30)), -300, "New York autumn, 01:30 (the second one)");
+    CHECK_EQ_INT(zone_offset_at_local(new_york, at(2026, 11, 1, 2, 0)), -300, "New York autumn, 02:00");
+
+    // Berlin's rules are in UTC: 01:00 UTC is 02:00 CET and 03:00 CEST.
+    const uzone_packed_t *berlin = &zone_defns[UTZ_BERLIN];
+    CHECK_EQ_INT(zone_offset_at_local(berlin, at(2026, 3, 29, 1, 59)), 60, "Berlin spring, 01:59");
+    CHECK_EQ_INT(zone_offset_at_local(berlin, at(2026, 3, 29, 2, 30)), 60, "Berlin spring, 02:30 (skipped)");
+    CHECK_EQ_INT(zone_offset_at_local(berlin, at(2026, 3, 29, 3, 0)), 120, "Berlin spring, 03:00");
+    CHECK_EQ_INT(zone_offset_at_local(berlin, at(2026, 10, 25, 1, 59)), 120, "Berlin autumn, 01:59");
+    CHECK_EQ_INT(zone_offset_at_local(berlin, at(2026, 10, 25, 2, 30)), 60, "Berlin autumn, 02:30 (the second one)");
+    CHECK_EQ_INT(zone_offset_at_local(berlin, at(2026, 10, 25, 3, 0)), 60, "Berlin autumn, 03:00");
+
+    // Sydney: summer time ends at 03:00 on 5 April and starts at 02:00 on 4 October,
+    // both on the previous day in UTC.
+    const uzone_packed_t *sydney = &zone_defns[UTZ_SYDNEY];
+    CHECK_EQ_INT(zone_offset_at_local(sydney, at(2026, 4, 5, 1, 59)), 660, "Sydney autumn, 01:59");
+    CHECK_EQ_INT(zone_offset_at_local(sydney, at(2026, 4, 5, 3, 0)), 600, "Sydney autumn, 03:00");
+    CHECK_EQ_INT(zone_offset_at_local(sydney, at(2026, 10, 4, 1, 59)), 600, "Sydney spring, 01:59");
+    CHECK_EQ_INT(zone_offset_at_local(sydney, at(2026, 10, 4, 2, 30)), 600, "Sydney spring, 02:30 (skipped)");
+    CHECK_EQ_INT(zone_offset_at_local(sydney, at(2026, 10, 4, 3, 0)), 660, "Sydney spring, 03:00");
+
+    // 00:30 on 1 January in Auckland is still the old year in UTC.
+    CHECK_EQ_INT(zone_offset_at_local(&zone_defns[UTZ_AUCKLAND], at(2026, 1, 1, 0, 30)), 780, "Auckland, new year");
+    CHECK_EQ_INT(zone_offset_at_local(&zone_defns[UTZ_KOLKATA], at(2026, 7, 1, 12, 0)), 330, "Kolkata");
+}
+
 static void test_each_zone_uses_one_clock_for_its_rules(void) {
     // zone_offset reads the clock from a zone's first rule.
     for (size_t z = 0; z < NUM_ZONE_NAMES; z++) {
@@ -117,5 +158,6 @@ int main(void) {
     test_zone_without_rules();
     test_local_day_in_another_year();
     test_standard_time_input();
+    test_wall_clock_input();
     return check_summary("test_zone_offset");
 }
