@@ -3,16 +3,18 @@
 
 # CC is make's default (cc) unless the environment sets it (the nix shell sets gcc).
 CFLAGS := -std=c11 -Wall -Wextra -Werror -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all
-CPPFLAGS := -I. -I../lib/zodiac -I../lib/planetary -I../lib/sunriset -I../lib/sun_events -I../lib/pet
+CPPFLAGS := -I. -I../lib/zodiac -I../lib/planetary -I../lib/sunriset -I../lib/sun_events -I../lib/pet -I../lib/zone_offset -I../utz
 LDLIBS := -lm
 
 # One program per test file: add test_<name> to TESTS and list its sources
 # as test_<name>_SRCS.
-TESTS := test_zodiac test_planetary test_sun_events test_pet test_filesystem
+TESTS := test_zodiac test_planetary test_sun_events test_pet test_filesystem test_zone_offset
 test_zodiac_SRCS := test_zodiac.c ../lib/zodiac/zodiac.c ../lib/sunriset/sunriset.c
 test_planetary_SRCS := test_planetary.c ../lib/planetary/planetary.c ../lib/sun_events/sun_events.c ../lib/sunriset/sunriset.c
 test_sun_events_SRCS := test_sun_events.c ../lib/sun_events/sun_events.c ../lib/sunriset/sunriset.c
 test_pet_SRCS := test_pet.c ../lib/pet/pet.c
+# The real utz zone table and rule lookup.
+test_zone_offset_SRCS := test_zone_offset.c ../lib/zone_offset/zone_offset.c ../utz/utz.c ../utz/zones.c
 # filesystem.c with real littlefs, over a RAM flash; stubs/ stands in for the
 # watch and movement headers it includes.
 test_filesystem_SRCS := test_filesystem.c ../filesystem/filesystem.c ../littlefs/lfs.c ../littlefs/lfs_util.c ../lib/base64/base64.c
@@ -25,7 +27,7 @@ test: $(addprefix build/,$(TESTS))
 .SECONDEXPANSION:
 # Any header in test/ or lib/ triggers a rebuild, so a header-only change is never
 # tested against a stale binary.
-HEADERS := $(wildcard *.h stubs/*.h ../lib/*/*.h ../filesystem/*.h ../littlefs/*.h)
+HEADERS := $(wildcard *.h stubs/*.h ../lib/*/*.h ../filesystem/*.h ../littlefs/*.h ../utz/*.h)
 
 build/%: $$($$*_SRCS) $(HEADERS)
 	@mkdir -p build
