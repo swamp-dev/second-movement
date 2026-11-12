@@ -268,6 +268,10 @@ pet_load_t pet_load(bool file_exists, bool read_ok, const uint8_t buf[PET_SAVE_S
     return PET_LOAD_UNREADABLE;
 }
 
+bool pet_action_needs_save_note(pet_action_t action) {
+    return action == PET_ACTION_FEED || action == PET_ACTION_PLAY;
+}
+
 bool pet_should_save(const pet_state_t *saved, const pet_state_t *pet, bool unsaved_action) {
     bool clock_went_back = pet->last_update < saved->last_update;
     uint32_t since_save = clock_went_back ? 0 : pet->last_update - saved->last_update;

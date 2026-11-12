@@ -657,7 +657,9 @@ typedef struct {
 
 static void fake_face_step(fake_face_t *face, uint32_t now, pet_action_t press) {
     pet_advance_to(&face->pet, now);
-    if (press != NO_PRESS && pet_apply_action(&face->pet, press)) face->unsaved_action = true;
+    if (press != NO_PRESS && pet_apply_action(&face->pet, press) && pet_action_needs_save_note(press)) {
+        face->unsaved_action = true;
+    }
     if (pet_should_save(&face->saved, &face->pet, face->unsaved_action)) {
         face->saved = face->pet;
         face->unsaved_action = false;
@@ -713,6 +715,75 @@ static void test_a_feed_right_after_a_save_is_written_one_gap_later(void) {
     CHECK_EQ_INT(face.writes, 1, "writes with nothing more done");
 }
 
+// bEd then GEt UP leaves the pet as it was saved, so there is nothing to
+// write, however long the face then waits.
+static void test_bed_then_get_up_right_after_a_save_writes_nothing(void) {
+    fake_face_t face = {.pet = baby()};
+    uint32_t now = T0 + 5 * HOUR; // awake long enough to be tired
+    pet_advance_to(&face.pet, now);
+    face.saved = face.pet;
+
+    fake_face_step(&face, ++now, PET_ACTION_LIGHTS);
+    CHECK(face.pet.asleep);
+    fake_face_step(&face, ++now, PET_ACTION_LIGHTS);
+    CHECK(!face.pet.asleep);
+
+    for (uint32_t i = 0; i < 5 * PET_SAVE_MIN_GAP_SECONDS; i++) fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, 0, "writes after bEd then GEt UP");
+    CHECK(!face.unsaved_action);
+
+    // The pet is still saved when the interval comes round.
+    for (uint32_t i = 0; i < PET_SAVE_INTERVAL_SECONDS; i++) fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, 1, "writes once the save interval has passed");
+}
+
+// A feed's note outlasts a bEd / GEt UP that follows it: the feed is still
+// written when the gap is up.
+static void test_a_feed_is_still_written_after_bed_then_get_up(void) {
+    fake_face_t face = {.pet = baby()};
+    uint32_t now = T0 + 5 * HOUR; // hungry and tired
+    pet_advance_to(&face.pet, now);
+    face.saved = face.pet;
+
+    fake_face_step(&face, ++now, PET_ACTION_FEED);
+    fake_face_step(&face, ++now, PET_ACTION_LIGHTS);
+    fake_face_step(&face, ++now, PET_ACTION_LIGHTS);
+    CHECK(!face.pet.asleep);
+    CHECK_EQ_INT(face.writes, 0, "writes inside the gap");
+
+    for (uint32_t i = 0; i < 5 * PET_SAVE_MIN_GAP_SECONDS; i++) fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, 1, "writes after feed, bEd, GEt UP");
+    CHECK_EQ_INT(face.saved.fullness, face.pet.fullness, "fullness on file");
+}
+
+// bEd alone is a change, and is written once when the gap is up.
+static void test_bed_right_after_a_save_is_written_one_gap_later(void) {
+    fake_face_t face = {.pet = baby()};
+    uint32_t now = T0 + 5 * HOUR; // awake long enough to be tired
+    pet_advance_to(&face.pet, now);
+    face.saved = face.pet;
+
+    fake_face_step(&face, ++now, PET_ACTION_LIGHTS);
+    CHECK(face.pet.asleep);
+    CHECK_EQ_INT(face.writes, 0, "writes right after bEd");
+
+    for (uint32_t i = 1; i < PET_SAVE_MIN_GAP_SECONDS - 1; i++) fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, 0, "writes just before the gap is up");
+    fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, 1, "writes when the gap is up");
+    CHECK(face.saved.asleep);
+
+    for (uint32_t i = 0; i < 5 * PET_SAVE_MIN_GAP_SECONDS; i++) fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, 1, "writes with nothing more done");
+}
+
+static void test_only_stat_actions_need_a_save_note(void) {
+    CHECK(pet_action_needs_save_note(PET_ACTION_FEED));
+    CHECK(pet_action_needs_save_note(PET_ACTION_PLAY));
+    CHECK(!pet_action_needs_save_note(PET_ACTION_LIGHTS));
+    CHECK(!pet_action_needs_save_note(PET_ACTION_STATUS));
+}
+
 int main(void) {
     test_egg_hatches_with_full_stats();
     test_ignored_pet_needs_attention_after_eight_waking_hours();
@@ -749,5 +820,9 @@ int main(void) {
     test_a_change_waits_for_the_gap_since_the_last_save();
     test_an_hour_of_bed_presses_is_rate_limited_and_nothing_is_lost();
     test_a_feed_right_after_a_save_is_written_one_gap_later();
+    test_only_stat_actions_need_a_save_note();
+    test_bed_then_get_up_right_after_a_save_writes_nothing();
+    test_a_feed_is_still_written_after_bed_then_get_up();
+    test_bed_right_after_a_save_is_written_one_gap_later();
     return check_summary("test_pet");
 }
