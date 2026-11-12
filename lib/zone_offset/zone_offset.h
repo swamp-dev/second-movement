@@ -39,4 +39,10 @@ int16_t zone_offset_at_utc(const uzone_packed_t *zone, udatetime_t utc);
 /// the zone's base offset, with no daylight saving shift).
 int16_t zone_offset_at_standard(const uzone_packed_t *zone, udatetime_t standard);
 
+/// The offset that turns the wall-clock date-time `local` in `zone` into UTC.
+/// A time the clocks skip when they go forward gets the offset from before
+/// the change, so it lands an hour later on the wall clock (02:30 becomes
+/// 03:30). A time that happens twice when they go back is the second one.
+int16_t zone_offset_at_local(const uzone_packed_t *zone, udatetime_t local);
+
 #endif // ZONE_OFFSET_H_

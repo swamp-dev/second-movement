@@ -716,8 +716,11 @@ void movement_set_utc_date_time(watch_date_time_t date_time) {
 }
 
 void movement_set_local_date_time(watch_date_time_t date_time) {
-    int32_t current_offset = movement_get_current_timezone_offset();
-    movement_set_utc_timestamp(watch_utility_date_time_to_unix_time(date_time, current_offset));
+    // The offset on the date being set: it may be on the other side of a DST
+    // change from the current date, where the cached offset doesn't apply.
+    udatetime_t local = _movement_convert_date_time_to_udate(date_time);
+    int32_t offset = (int32_t)zone_offset_at_local(&zone_defns[movement_state.settings.bit.time_zone], local) * 60;
+    movement_set_utc_timestamp(watch_utility_date_time_to_unix_time(date_time, offset));
 }
 
 void movement_set_utc_timestamp(uint32_t timestamp) {

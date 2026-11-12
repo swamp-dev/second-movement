@@ -103,3 +103,16 @@ int16_t zone_offset_at_standard(const uzone_packed_t *zone, udatetime_t standard
     if (_rules_are_in_utc(zone)) _shift_minutes(&standard, -_standard_offset(zone));
     return _offset_at_rule_time(zone, standard);
 }
+
+int16_t zone_offset_at_local(const uzone_packed_t *zone, udatetime_t local) {
+    // Away from a change, the wall clock and the standard clock are on the
+    // same side of it, so reading `local` as standard time finds the offset.
+    int16_t offset = zone_offset_at_standard(zone, local);
+
+    // In the hour the clocks skip, that reading is already summer time, but
+    // the UTC time it leads to is still before the change. The offset in
+    // force at that UTC time is the one that gives a wall-clock time that
+    // exists. Everywhere else it is `offset` again.
+    _shift_minutes(&local, -offset);
+    return zone_offset_at_utc(zone, local);
+}
