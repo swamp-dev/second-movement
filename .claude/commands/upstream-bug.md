@@ -118,10 +118,10 @@ Comment the issue's URL on our ticket straight away (`Upstream issue: <URL>`),
 so a rerun after a failed push reuses it.
 
 Then push the branch and open the PR with § Upstream PRs step 4's commands,
-but not its body list: the body is `Fixes #<upstream issue>` on its own line, a short statement of the bug
-and cause, what the change does, and how it was tested (builds, simulator
-steps, the host test here with the full URL of this fork's merged PR). The
-full bug report stays in the issue.
+but not its body list. The body is `Fixes #<upstream issue>` on its own
+line, a short statement of the bug and cause, what the change does, and how
+it was tested (builds, simulator steps, the host test here with the full URL
+of this fork's merged PR). The full bug report stays in the issue.
 
 ## 5. Record and close
 
