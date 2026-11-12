@@ -56,6 +56,9 @@
  * a save from a newer firmware). The save is left alone and read again each
  * time the face is opened. ALARM (long) gives up on it and hatches a new egg.
  *
+ * The pet is saved at most once a minute, to spare the flash. A reset (a
+ * battery change, new firmware) can undo the last minute of care.
+ *
  * The rules and every rate live in lib/pet/pet.h.
  */
 
@@ -68,6 +71,7 @@ typedef struct {
     uint32_t drawn_age; // the pet's age_minutes when the screen was last drawn
     bool has_pet;       // false until a save was loaded or the first egg was laid
     bool unreadable;    // a save file exists but can't be used; it must not be overwritten
+    bool unsaved_action; // an action was applied since the last save
     uint8_t action;     // pet_action_t selected with LIGHT
     uint8_t page;       // pet_page_t on the bottom line
 } pet_face_state_t;

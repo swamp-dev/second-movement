@@ -38,12 +38,17 @@ static void _save(pet_face_state_t *state) {
     // otherwise pet_should_save would stay true and retry on every tick. The
     // next change or save interval tries again.
     state->saved = state->pet;
+    state->unsaved_action = false;
 }
 
-// Brings the pet up to the present and saves it if enough has changed.
+static void _save_if_due(pet_face_state_t *state) {
+    if (pet_should_save(&state->saved, &state->pet, state->unsaved_action)) _save(state);
+}
+
+// Brings the pet up to the present and saves it if it's due.
 static void _catch_up(pet_face_state_t *state) {
     pet_advance_to(&state->pet, movement_get_utc_timestamp());
-    if (pet_should_save(&state->saved, &state->pet)) _save(state);
+    _save_if_due(state);
 }
 
 static void _load(pet_face_state_t *state) {
@@ -175,12 +180,15 @@ bool pet_face_loop(movement_event_t event, void *context) {
         case EVENT_ALARM_BUTTON_UP:
             if (dead) break;
             // Act on the pet as it is now, not as it was at the last tick.
-            _catch_up(state);
+            pet_advance_to(&state->pet, movement_get_utc_timestamp());
             {
                 bool applied = pet_apply_action(&state->pet, (pet_action_t)state->action);
                 state->page = pet_page_after_action((pet_action_t)state->action, applied, (pet_page_t)state->page);
-                if (applied && state->action != PET_ACTION_STATUS) _save(state);
+                if (applied && state->action != PET_ACTION_STATUS) state->unsaved_action = true;
             }
+            // Not always at once: saves are spaced out, and a later tick or
+            // the every-minute advise writes what had to wait.
+            _save_if_due(state);
             _draw(state);
             break;
 
@@ -224,5 +232,5 @@ movement_watch_face_advisory_t pet_face_advise(void *context) {
 
 void pet_face_resign(void *context) {
     pet_face_state_t *state = (pet_face_state_t *)context;
-    if (state->has_pet && pet_should_save(&state->saved, &state->pet)) _save(state);
+    if (state->has_pet) _save_if_due(state);
 }

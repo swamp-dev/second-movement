@@ -73,6 +73,11 @@
 // exactly; long enough to cost only a few flash writes a day.
 #define PET_SAVE_INTERVAL_SECONDS (6UL * 60 * 60)
 
+// Shortest time between two saves. Actions cost a flash write, and bEd /
+// GEt UP can be pressed without limit, so writes are spaced this far apart.
+// A reset can lose up to this much care.
+#define PET_SAVE_MIN_GAP_SECONDS 60
+
 // ---- State ----
 
 typedef enum {
@@ -185,10 +190,13 @@ typedef enum {
 // PET_LOAD_OK.
 pet_load_t pet_load(bool file_exists, bool read_ok, const uint8_t buf[PET_SAVE_SIZE], size_t length, pet_state_t *pet);
 
-// True when `pet` should be written out, given the copy last saved: its
-// stage or sleep changed, the clock went backward, or
-// PET_SAVE_INTERVAL_SECONDS have passed. A dead pet is saved once, at death.
-// (Save after every applied action too; that one is the caller's job.)
-bool pet_should_save(const pet_state_t *saved, const pet_state_t *pet);
+// True when `pet` should be written out, given the copy last saved.
+// unsaved_action says an action was applied since that save. A change (an
+// action, sleep or waking, a new stage) is saved once
+// PET_SAVE_MIN_GAP_SECONDS have passed since the last save, so call this on
+// every update and a change made sooner is written when its turn comes.
+// With no change, the pet is saved every PET_SAVE_INTERVAL_SECONDS. A clock
+// set backward is saved at once. A dead pet is saved once, at death.
+bool pet_should_save(const pet_state_t *saved, const pet_state_t *pet, bool unsaved_action);
 
 #endif // PET_H_

@@ -268,9 +268,13 @@ pet_load_t pet_load(bool file_exists, bool read_ok, const uint8_t buf[PET_SAVE_S
     return PET_LOAD_UNREADABLE;
 }
 
-bool pet_should_save(const pet_state_t *saved, const pet_state_t *pet) {
-    if (pet->stage != saved->stage || pet->asleep != saved->asleep) return true;
+bool pet_should_save(const pet_state_t *saved, const pet_state_t *pet, bool unsaved_action) {
+    bool clock_went_back = pet->last_update < saved->last_update;
+    uint32_t since_save = clock_went_back ? 0 : pet->last_update - saved->last_update;
+
+    if (unsaved_action || pet->stage != saved->stage || pet->asleep != saved->asleep) {
+        return clock_went_back || since_save >= PET_SAVE_MIN_GAP_SECONDS;
+    }
     if (pet->stage == PET_STAGE_DEAD) return false;
-    if (pet->last_update < saved->last_update) return true;
-    return pet->last_update - saved->last_update >= PET_SAVE_INTERVAL_SECONDS;
+    return clock_went_back || since_save >= PET_SAVE_INTERVAL_SECONDS;
 }
