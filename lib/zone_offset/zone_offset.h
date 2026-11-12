@@ -39,4 +39,8 @@ int16_t zone_offset_at_utc(const uzone_packed_t *zone, udatetime_t utc);
 /// the zone's base offset, with no daylight saving shift).
 int16_t zone_offset_at_standard(const uzone_packed_t *zone, udatetime_t standard);
 
+/// The same, at a Unix time (seconds, UTC) from 2000 to 2099, the years a
+/// udate_t holds.
+int16_t zone_offset_at_unix_time(const uzone_packed_t *zone, uint32_t unix_time);
+
 #endif // ZONE_OFFSET_H_
