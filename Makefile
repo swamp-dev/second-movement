@@ -80,6 +80,7 @@ INCLUDES += \
   -I./lib/base64 \
   -I./lib/zodiac \
   -I./lib/planetary \
+  -I./lib/sun_events \
   -I./lib/pet \
   -I./watch-library/shared/watch \
   -I./watch-library/shared/driver \
@@ -111,6 +112,7 @@ SRCS += \
   ./lib/base64/base64.c \
   ./lib/zodiac/zodiac.c \
   ./lib/planetary/planetary.c \
+  ./lib/sun_events/sun_events.c \
   ./lib/pet/pet.c \
   ./watch-library/shared/driver/thermistor_driver.c \
   ./watch-library/shared/watch/watch_common_buzzer.c \

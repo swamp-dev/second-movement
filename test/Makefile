@@ -3,14 +3,15 @@
 
 # CC is make's default (cc) unless the environment sets it (the nix shell sets gcc).
 CFLAGS := -std=c11 -Wall -Wextra -Werror -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all
-CPPFLAGS := -I. -I../lib/zodiac -I../lib/planetary -I../lib/sunriset -I../lib/pet
+CPPFLAGS := -I. -I../lib/zodiac -I../lib/planetary -I../lib/sunriset -I../lib/sun_events -I../lib/pet
 LDLIBS := -lm
 
 # One program per test file: add test_<name> to TESTS and list its sources
 # as test_<name>_SRCS.
-TESTS := test_zodiac test_planetary test_pet test_filesystem
+TESTS := test_zodiac test_planetary test_sun_events test_pet test_filesystem
 test_zodiac_SRCS := test_zodiac.c ../lib/zodiac/zodiac.c ../lib/sunriset/sunriset.c
 test_planetary_SRCS := test_planetary.c ../lib/planetary/planetary.c ../lib/sunriset/sunriset.c
+test_sun_events_SRCS := test_sun_events.c ../lib/sun_events/sun_events.c ../lib/sunriset/sunriset.c
 test_pet_SRCS := test_pet.c ../lib/pet/pet.c
 # filesystem.c with real littlefs, over a RAM flash; stubs/ stands in for the
 # watch and movement headers it includes.
