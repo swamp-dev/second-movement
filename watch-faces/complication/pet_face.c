@@ -48,8 +48,9 @@ static void _catch_up(pet_face_state_t *state) {
 
 static void _load(pet_face_state_t *state) {
     uint8_t buf[PET_SAVE_SIZE];
-    // Absent only if the filesystem said so. A lookup that failed (a flash
-    // error) leaves size at -1 and so counts as a file that can't be read.
+    // Absent only if the filesystem said so. A failed lookup (a flash error)
+    // counts as present; if the size lookup fails too, size stays -1 and the
+    // file is treated as unreadable.
     bool exists = !filesystem_file_is_absent(PET_SAVE_FILE);
     int32_t size = exists ? filesystem_get_file_size(PET_SAVE_FILE) : -1;
     bool read_ok = size > 0 && filesystem_read_file(PET_SAVE_FILE, (char *)buf, sizeof(buf));
