@@ -76,7 +76,11 @@ sun_event_t sun_events_upcoming(int64_t now, unsigned skip, double latitude, dou
     // Two events a day; the day before the local mean day of `now` can still
     // hold a sunset after it at high latitudes, and each skipped event needs at
     // most one more day.
+    // The worst case is all polar days, one event each: then skip k needs day
+    // mean_day + k + 1 as well, since the day before is spent and the local
+    // mean day's own event can be before `now`.
     enum { DAYS = SUN_EVENTS_MAX_AHEAD + 3 };
+    _Static_assert(DAYS >= SUN_EVENTS_MAX_AHEAD + 3, "too few days for the largest skip");
     sun_event_t events[2 * DAYS];
     int count = 0;
     int64_t mean_day = _floor_div(now + (int64_t)(longitude * 240.0), 86400);
