@@ -26,7 +26,8 @@ Progress:
 
 If a ticket number was given, skip the ranking. If that ticket is open,
 check it is labelled `upstream` and unclaimed. If it is closed, still
-labelled `upstream`, and its fix is merged, go to step 3.
+labelled `upstream`, and its fix is merged, go to step 3. Otherwise say why
+and stop.
 
 ```bash
 git remote get-url upstream || git remote add upstream https://github.com/joeycastillo/second-movement.git
@@ -80,10 +81,11 @@ steps 1–3: check the fix is merged here and that upstream has neither the fix
 nor a PR for it, make `up/<N>-<slug>` off `upstream/main` with only the fix,
 and build all 8 board × display combinations.
 
-Host tests don't go upstream (it has no `test/`). If the fix has one, build
-it once more from the main checkout with the `cc` line `make -C test` prints
-for it, with each `../lib/…` and `../utz/…` source and `-I` path pointed at
-the `up/` worktree and `-o` at a file outside both checkouts. It must pass.
+Host tests don't go upstream (it has no `test/`). If the fix has one, print
+its compile line with `make -C test -n -B build/test_<name>`. Run that line
+in the main checkout's `test/`, with every `../` source and `-I` path pointed
+at the `up/` worktree and `-o` at a file outside both checkouts. Then run
+that binary; it must exit 0.
 
 ## 4. Upstream issue, then upstream PR
 
@@ -96,7 +98,8 @@ gh issue list -R joeycastillo/second-movement --state all --search "<face or fun
 ```
 
 If an open upstream issue already describes the bug, don't open another; the
-PR says `Fixes #<that issue>`. If a closed one does, stop and tell the user.
+PR says `Fixes #<that issue>`. If a closed one does, stop and tell the user;
+leave the ticket and its label as they are.
 
 Otherwise open the issue. Write it for a maintainer who has never seen this
 fork: what goes wrong, steps to trigger it, observed and expected, where in
@@ -111,8 +114,11 @@ any worktree:
 gh issue create -R joeycastillo/second-movement --title "<summary>" --body-file <file>
 ```
 
-Then push the branch and open the PR as in § Upstream PRs step 4. Its body
-is `Fixes #<upstream issue>` on its own line, a short statement of the bug
+Comment the issue's URL on our ticket straight away (`Upstream issue: <URL>`),
+so a rerun after a failed push reuses it.
+
+Then push the branch and open the PR with § Upstream PRs step 4's commands,
+but not its body list: the body is `Fixes #<upstream issue>` on its own line, a short statement of the bug
 and cause, what the change does, and how it was tested (builds, simulator
 steps, the host test here with the full URL of this fork's merged PR). The
 full bug report stays in the issue.
