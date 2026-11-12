@@ -184,7 +184,7 @@ bool pet_face_loop(movement_event_t event, void *context) {
             {
                 bool applied = pet_apply_action(&state->pet, (pet_action_t)state->action);
                 state->page = pet_page_after_action((pet_action_t)state->action, applied, (pet_page_t)state->page);
-                if (applied && state->action != PET_ACTION_STATUS) state->unsaved_action = true;
+                if (applied && pet_action_needs_save_note((pet_action_t)state->action)) state->unsaved_action = true;
             }
             // Not always at once: saves are spaced out, and a later tick or
             // the every-minute advise writes what had to wait.

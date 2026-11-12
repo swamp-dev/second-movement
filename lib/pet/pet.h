@@ -193,9 +193,17 @@ typedef enum {
 // PET_LOAD_OK.
 pet_load_t pet_load(bool file_exists, bool read_ok, const uint8_t buf[PET_SAVE_SIZE], size_t length, pet_state_t *pet);
 
+// True when applying `action` changes nothing pet_should_save can see by
+// comparing the pet with the saved copy, so the caller has to note it as an
+// unsaved action: feeding and playing, which change only stats. bEd / GEt UP
+// needs no note, since pet_should_save compares `asleep` itself, and a pet
+// put to bed and woken again before the save is then not written at all.
+bool pet_action_needs_save_note(pet_action_t action);
+
 // True when `pet` should be written out, given the copy last saved.
-// unsaved_action says an action was applied since that save. A change (an
-// action, sleep or waking, a new stage) is saved once
+// unsaved_action says an action that pet_action_needs_save_note was applied
+// since that save. A change (such an action, sleep or waking, a new stage)
+// is saved once
 // PET_SAVE_MIN_GAP_SECONDS have passed since the last save, so call this on
 // every update and a change made sooner is written when its turn comes.
 // With no change, the pet is saved every PET_SAVE_INTERVAL_SECONDS. A clock

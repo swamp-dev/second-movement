@@ -657,7 +657,9 @@ typedef struct {
 
 static void fake_face_step(fake_face_t *face, uint32_t now, pet_action_t press) {
     pet_advance_to(&face->pet, now);
-    if (press != NO_PRESS && pet_apply_action(&face->pet, press)) face->unsaved_action = true;
+    if (press != NO_PRESS && pet_apply_action(&face->pet, press) && pet_action_needs_save_note(press)) {
+        face->unsaved_action = true;
+    }
     if (pet_should_save(&face->saved, &face->pet, face->unsaved_action)) {
         face->saved = face->pet;
         face->unsaved_action = false;
@@ -751,6 +753,13 @@ static void test_bed_right_after_a_save_is_written_one_gap_later(void) {
     CHECK_EQ_INT(face.writes, 1, "writes with nothing more done");
 }
 
+static void test_only_stat_actions_need_a_save_note(void) {
+    CHECK(pet_action_needs_save_note(PET_ACTION_FEED));
+    CHECK(pet_action_needs_save_note(PET_ACTION_PLAY));
+    CHECK(!pet_action_needs_save_note(PET_ACTION_LIGHTS));
+    CHECK(!pet_action_needs_save_note(PET_ACTION_STATUS));
+}
+
 int main(void) {
     test_egg_hatches_with_full_stats();
     test_ignored_pet_needs_attention_after_eight_waking_hours();
@@ -787,6 +796,7 @@ int main(void) {
     test_a_change_waits_for_the_gap_since_the_last_save();
     test_an_hour_of_bed_presses_is_rate_limited_and_nothing_is_lost();
     test_a_feed_right_after_a_save_is_written_one_gap_later();
+    test_only_stat_actions_need_a_save_note();
     test_bed_then_get_up_right_after_a_save_writes_nothing();
     test_bed_right_after_a_save_is_written_one_gap_later();
     return check_summary("test_pet");
