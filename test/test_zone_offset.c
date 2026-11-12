@@ -101,7 +101,18 @@ static void test_standard_time_input(void) {
     CHECK_EQ_INT(zone_offset_at_standard(new_york, at(2026, 11, 1, 1, 0)), -300, "New York autumn, 01:00 standard");
 }
 
+static void test_each_zone_uses_one_clock_for_its_rules(void) {
+    // zone_offset reads the clock from a zone's first rule.
+    for (size_t z = 0; z < NUM_ZONE_NAMES; z++) {
+        const urule_packed_t *rules = &zone_rules[zone_defns[z].rules_idx];
+        for (uint8_t r = 1; r < zone_defns[z].rules_len; r++) {
+            CHECK_EQ_INT(rules[r].at_is_local_time, rules[0].at_is_local_time, "zone %zu, rule %u", z, r);
+        }
+    }
+}
+
 int main(void) {
+    test_each_zone_uses_one_clock_for_its_rules();
     test_changes_happen_at_the_iana_instant();
     test_zone_without_rules();
     test_local_day_in_another_year();
