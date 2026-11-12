@@ -730,6 +730,30 @@ static void test_bed_then_get_up_right_after_a_save_writes_nothing(void) {
 
     for (uint32_t i = 0; i < 5 * PET_SAVE_MIN_GAP_SECONDS; i++) fake_face_step(&face, ++now, NO_PRESS);
     CHECK_EQ_INT(face.writes, 0, "writes after bEd then GEt UP");
+    CHECK(!face.unsaved_action);
+
+    // The pet is still saved when the interval comes round.
+    for (uint32_t i = 0; i < PET_SAVE_INTERVAL_SECONDS; i++) fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, 1, "writes once the save interval has passed");
+}
+
+// A feed's note outlasts a bEd / GEt UP that follows it: the feed is still
+// written when the gap is up.
+static void test_a_feed_is_still_written_after_bed_then_get_up(void) {
+    fake_face_t face = {.pet = baby()};
+    uint32_t now = T0 + 5 * HOUR; // hungry and tired
+    pet_advance_to(&face.pet, now);
+    face.saved = face.pet;
+
+    fake_face_step(&face, ++now, PET_ACTION_FEED);
+    fake_face_step(&face, ++now, PET_ACTION_LIGHTS);
+    fake_face_step(&face, ++now, PET_ACTION_LIGHTS);
+    CHECK(!face.pet.asleep);
+    CHECK_EQ_INT(face.writes, 0, "writes inside the gap");
+
+    for (uint32_t i = 0; i < 5 * PET_SAVE_MIN_GAP_SECONDS; i++) fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, 1, "writes after feed, bEd, GEt UP");
+    CHECK_EQ_INT(face.saved.fullness, face.pet.fullness, "fullness on file");
 }
 
 // bEd alone is a change, and is written once when the gap is up.
@@ -798,6 +822,7 @@ int main(void) {
     test_a_feed_right_after_a_save_is_written_one_gap_later();
     test_only_stat_actions_need_a_save_note();
     test_bed_then_get_up_right_after_a_save_writes_nothing();
+    test_a_feed_is_still_written_after_bed_then_get_up();
     test_bed_right_after_a_save_is_written_one_gap_later();
     return check_summary("test_pet");
 }
