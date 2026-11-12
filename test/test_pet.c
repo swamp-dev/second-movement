@@ -653,9 +653,11 @@ typedef struct {
     uint32_t writes;
 } fake_face_t;
 
-static void fake_face_step(fake_face_t *face, uint32_t now, bool press_lights) {
+#define NO_PRESS PET_ACTION_COUNT
+
+static void fake_face_step(fake_face_t *face, uint32_t now, pet_action_t press) {
     pet_advance_to(&face->pet, now);
-    if (press_lights && pet_apply_action(&face->pet, PET_ACTION_LIGHTS)) face->unsaved_action = true;
+    if (press != NO_PRESS && pet_apply_action(&face->pet, press)) face->unsaved_action = true;
     if (pet_should_save(&face->saved, &face->pet, face->unsaved_action)) {
         face->saved = face->pet;
         face->unsaved_action = false;
@@ -673,18 +675,42 @@ static void test_an_hour_of_bed_presses_is_rate_limited_and_nothing_is_lost(void
     face.saved = face.pet;
 
     const uint32_t presses = 3601; // odd: the pet ends up asleep
-    for (uint32_t i = 0; i < presses; i++) fake_face_step(&face, ++now, true);
+    for (uint32_t i = 0; i < presses; i++) fake_face_step(&face, ++now, PET_ACTION_LIGHTS);
     CHECK(face.pet.asleep);
     CHECK(face.writes > 0);
     CHECK(face.writes <= presses / PET_SAVE_MIN_GAP_SECONDS + 1);
 
     // The presses stop. Within one gap the file matches the pet.
-    for (uint32_t i = 0; i < PET_SAVE_MIN_GAP_SECONDS; i++) fake_face_step(&face, ++now, false);
+    for (uint32_t i = 0; i < PET_SAVE_MIN_GAP_SECONDS; i++) fake_face_step(&face, ++now, NO_PRESS);
     CHECK(face.saved.asleep);
     CHECK(!face.unsaved_action);
     const uint32_t settled = face.writes;
-    for (uint32_t i = 0; i < 10 * PET_SAVE_MIN_GAP_SECONDS; i++) fake_face_step(&face, ++now, false);
+    for (uint32_t i = 0; i < 10 * PET_SAVE_MIN_GAP_SECONDS; i++) fake_face_step(&face, ++now, NO_PRESS);
     CHECK_EQ_INT(face.writes, settled, "writes once the presses stop");
+}
+
+// Feeding changes only a stat, so nothing but the face's "unsaved action"
+// note says there is something to write. A feed right after a save waits,
+// then is written once.
+static void test_a_feed_right_after_a_save_is_written_one_gap_later(void) {
+    fake_face_t face = {.pet = baby()};
+    uint32_t now = T0 + 5 * HOUR; // long enough to be hungry
+    pet_advance_to(&face.pet, now);
+    face.saved = face.pet;
+
+    fake_face_step(&face, ++now, PET_ACTION_FEED);
+    CHECK(face.unsaved_action);
+    CHECK_EQ_INT(face.writes, 0, "writes right after the feed");
+
+    for (uint32_t i = 1; i < PET_SAVE_MIN_GAP_SECONDS - 1; i++) fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, 0, "writes just before the gap is up");
+    fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, 1, "writes when the gap is up");
+    CHECK(!face.unsaved_action);
+    CHECK_EQ_INT(face.saved.fullness, face.pet.fullness, "fullness on file");
+
+    for (uint32_t i = 0; i < 10 * PET_SAVE_MIN_GAP_SECONDS; i++) fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, 1, "writes with nothing more done");
 }
 
 int main(void) {
@@ -722,5 +748,6 @@ int main(void) {
     test_should_save();
     test_a_change_waits_for_the_gap_since_the_last_save();
     test_an_hour_of_bed_presses_is_rate_limited_and_nothing_is_lost();
+    test_a_feed_right_after_a_save_is_written_one_gap_later();
     return check_summary("test_pet");
 }

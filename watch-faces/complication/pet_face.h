@@ -56,8 +56,9 @@
  * a save from a newer firmware). The save is left alone and read again each
  * time the face is opened. ALARM (long) gives up on it and hatches a new egg.
  *
- * The pet is saved at most once a minute, to spare the flash. A reset (a
- * battery change, new firmware) can undo the last minute of care.
+ * To spare the flash, what you do to the pet is saved at most once a minute.
+ * A reset (a battery change, new firmware) can undo the last minute or two
+ * of care.
  *
  * The rules and every rate live in lib/pet/pet.h.
  */

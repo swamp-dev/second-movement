@@ -73,9 +73,12 @@
 // exactly; long enough to cost only a few flash writes a day.
 #define PET_SAVE_INTERVAL_SECONDS (6UL * 60 * 60)
 
-// Shortest time between two saves. Actions cost a flash write, and bEd /
-// GEt UP can be pressed without limit, so writes are spaced this far apart.
-// A reset can lose up to this much care.
+// Shortest time between two saves of a change to the pet. Each save is a
+// flash write, and bEd / GEt UP can be pressed without limit, so they are
+// spaced this far apart. A reset can lose the care given since the last
+// save: this long, plus up to a minute more when the pet face isn't showing
+// (the pet is then updated once a minute). A new egg and a clock set
+// backward are saved at once.
 #define PET_SAVE_MIN_GAP_SECONDS 60
 
 // ---- State ----
