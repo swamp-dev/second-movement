@@ -137,9 +137,39 @@ static void test_wall_clock_input(void) {
     CHECK_EQ_INT(zone_offset_at_local(sydney, at(2026, 10, 4, 2, 30)), 600, "Sydney spring, 02:30 (skipped)");
     CHECK_EQ_INT(zone_offset_at_local(sydney, at(2026, 10, 4, 3, 0)), 660, "Sydney spring, 03:00");
 
+    CHECK_EQ_INT(zone_offset_at_local(sydney, at(2026, 4, 5, 2, 30)), 600, "Sydney autumn, 02:30 (the second one)");
+
+    // 23:30 on 31 December in Pago Pago is already the new year in UTC.
+    CHECK_EQ_INT(zone_offset_at_local(&zone_defns[UTZ_PAGO_PAGO], at(2026, 12, 31, 23, 30)), -660, "Pago Pago, new year's eve");
+    // 00:30 on 29 February 2028 in Berlin is still the 28th in UTC.
+    CHECK_EQ_INT(zone_offset_at_local(berlin, at(2028, 2, 29, 0, 30)), 60, "Berlin, leap day");
     // 00:30 on 1 January in Auckland is still the old year in UTC.
     CHECK_EQ_INT(zone_offset_at_local(&zone_defns[UTZ_AUCKLAND], at(2026, 1, 1, 0, 30)), 780, "Auckland, new year");
     CHECK_EQ_INT(zone_offset_at_local(&zone_defns[UTZ_KOLKATA], at(2026, 7, 1, 12, 0)), 330, "Kolkata");
+}
+
+static void test_wall_clock_input_with_a_preferred_offset(void) {
+    const uzone_packed_t *new_york = &zone_defns[UTZ_NEW_YORK];
+
+    // 01:30 on 1 November happens twice. Whichever one the clock is in, an
+    // adjustment within the hour stays in it.
+    CHECK_EQ_INT(zone_offset_at_local_preferring(new_york, at(2026, 11, 1, 1, 30), -240), -240, "New York autumn, 01:30 from EDT");
+    CHECK_EQ_INT(zone_offset_at_local_preferring(new_york, at(2026, 11, 1, 1, 30), -300), -300, "New York autumn, 01:30 from EST");
+    // Outside the repeated hour only one offset is right, whatever is preferred.
+    CHECK_EQ_INT(zone_offset_at_local_preferring(new_york, at(2026, 11, 1, 2, 30), -240), -300, "New York autumn, 02:30 from EDT");
+    CHECK_EQ_INT(zone_offset_at_local_preferring(new_york, at(2026, 11, 1, 0, 30), -300), -240, "New York autumn, 00:30 from EST");
+    CHECK_EQ_INT(zone_offset_at_local_preferring(new_york, at(2026, 4, 5, 12, 0), -300), -240, "New York, 5 April noon from EST");
+    CHECK_EQ_INT(zone_offset_at_local_preferring(new_york, at(2026, 3, 5, 12, 0), -240), -300, "New York, 5 March noon from EDT");
+    // The skipped hour still goes forward: with -300, 02:30 is 07:30 UTC, which is 03:30 EDT.
+    CHECK_EQ_INT(zone_offset_at_local_preferring(new_york, at(2026, 3, 8, 2, 30), -300), -300, "New York spring, 02:30 from EST");
+    CHECK_EQ_INT(zone_offset_at_local_preferring(new_york, at(2026, 3, 8, 2, 30), -240), -300, "New York spring, 02:30 from EDT");
+
+    const uzone_packed_t *berlin = &zone_defns[UTZ_BERLIN];
+    CHECK_EQ_INT(zone_offset_at_local_preferring(berlin, at(2026, 10, 25, 2, 30), 120), 120, "Berlin autumn, 02:30 from CEST");
+    CHECK_EQ_INT(zone_offset_at_local_preferring(berlin, at(2026, 10, 25, 2, 30), 60), 60, "Berlin autumn, 02:30 from CET");
+
+    // A preferred offset the zone never has, as after the zone itself was changed.
+    CHECK_EQ_INT(zone_offset_at_local_preferring(&zone_defns[UTZ_KOLKATA], at(2026, 7, 1, 12, 0), -300), 330, "Kolkata from EST");
 }
 
 static void test_each_zone_uses_one_clock_for_its_rules(void) {
@@ -159,5 +189,6 @@ int main(void) {
     test_local_day_in_another_year();
     test_standard_time_input();
     test_wall_clock_input();
+    test_wall_clock_input_with_a_preferred_offset();
     return check_summary("test_zone_offset");
 }
