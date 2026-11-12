@@ -297,6 +297,20 @@ static void test_page_after_action(void) {
 
 // ---- pet_render ----
 
+// Every screen must fit both LCDs.
+static void check_screen_fits(const pet_screen_t *s) {
+    CHECK(strlen(s->top) == 5); // always all 5, so a shorter mood leaves nothing behind
+    CHECK(strlen(s->top_fallback) == 2);
+    CHECK(strlen(s->bottom) == 6);
+    // The classic LCD ties the top and bottom segments of bottom characters 0
+    // and 2 together, so only these draw there (the display code swaps in
+    // look-alikes for A, L, t and U).
+    CHECK(strchr(" ACEGHLOSUnort0123456789", s->bottom[0]) != NULL);
+    CHECK(strchr(" ACEGHLOSUnort0123456789", s->bottom[2]) != NULL);
+    // ...and its second top character has too few segments for most letters.
+    CHECK(strchr(" AEHILORU", s->top_fallback[1]) != NULL);
+}
+
 static void check_screen(const pet_state_t *pet, pet_action_t action, pet_page_t page,
                          const char *top, const char *fallback, const char *bottom, int line) {
     pet_screen_t s;
@@ -308,16 +322,7 @@ static void check_screen(const pet_state_t *pet, pet_action_t action, pet_page_t
         fprintf(stderr, "%s:%d: screen [%s|%s|%s], expected [%s|%s|%s]\n", __FILE__, line,
                 s.top, s.top_fallback, s.bottom, top, fallback, bottom);
     }
-    CHECK(strlen(s.top) == 5); // always all 5, so a shorter mood leaves nothing behind
-    CHECK(strlen(s.top_fallback) == 2);
-    CHECK(strlen(s.bottom) == 6);
-    // The classic LCD ties the top and bottom segments of bottom characters 0
-    // and 2 together, so only these draw there (the display code swaps in
-    // look-alikes for A, L, t and U).
-    CHECK(strchr(" ACEGHLOSUnort0123456789", s.bottom[0]) != NULL);
-    CHECK(strchr(" ACEGHLOSUnort0123456789", s.bottom[2]) != NULL);
-    // ...and its second top character has too few segments for most letters.
-    CHECK(strchr(" AEHILORU", s.top_fallback[1]) != NULL);
+    check_screen_fits(&s);
 }
 #define CHECK_SCREEN(pet, action, page, top, fallback, bottom) \
     check_screen(pet, action, page, top, fallback, bottom, __LINE__)
@@ -476,6 +481,66 @@ static void test_unreadable_saves_are_rejected(void) {
     CHECK(memcmp(&pet, &untouched, sizeof(pet)) == 0);
 }
 
+// ---- pet_load ----
+
+static void test_load_no_file_means_a_new_egg(void) {
+    pet_state_t pet = baby(), before = pet;
+    uint8_t buf[PET_SAVE_SIZE] = {0};
+    CHECK_EQ_INT(pet_load(false, false, buf, 0, &pet), PET_LOAD_NO_SAVE, "no file");
+    CHECK(same(&pet, &before));
+}
+
+static void test_load_good_file(void) {
+    pet_state_t saved = baby(), pet;
+    uint8_t buf[PET_SAVE_SIZE];
+    saved.fullness = 42;
+    pet_serialize(&saved, buf);
+    memset(&pet, 0, sizeof(pet));
+    CHECK_EQ_INT(pet_load(true, true, buf, PET_SAVE_SIZE, &pet), PET_LOAD_OK, "good file");
+    CHECK(same(&pet, &saved));
+
+    // A longer file with the same version (fields appended later) still loads.
+    memset(&pet, 0, sizeof(pet));
+    CHECK_EQ_INT(pet_load(true, true, buf, PET_SAVE_SIZE + 8, &pet), PET_LOAD_OK, "longer file");
+    CHECK(same(&pet, &saved));
+}
+
+// The point of #39: a file that exists is never treated as "no pet yet",
+// whatever is wrong with it, so nothing overwrites it without the user asking.
+static void test_load_existing_file_that_cannot_be_used_is_unreadable(void) {
+    pet_state_t good = baby(), pet = good, before = pet;
+    uint8_t buf[PET_SAVE_SIZE];
+    pet_serialize(&good, buf);
+
+    // The read itself failed (flash error), though the bytes would be fine.
+    CHECK_EQ_INT(pet_load(true, false, buf, PET_SAVE_SIZE, &pet), PET_LOAD_UNREADABLE, "read failed");
+    // Written by a newer firmware.
+    buf[0] = PET_SAVE_VERSION + 1;
+    CHECK_EQ_INT(pet_load(true, true, buf, PET_SAVE_SIZE, &pet), PET_LOAD_UNREADABLE, "newer version");
+    buf[0] = PET_SAVE_VERSION;
+    // Corrupt contents.
+    buf[3] = PET_STAT_MAX + 1;
+    CHECK_EQ_INT(pet_load(true, true, buf, PET_SAVE_SIZE, &pet), PET_LOAD_UNREADABLE, "corrupt");
+    buf[3] = good.fullness;
+    // Truncated.
+    CHECK_EQ_INT(pet_load(true, true, buf, PET_SAVE_SIZE - 1, &pet), PET_LOAD_UNREADABLE, "truncated");
+    // Empty, or the filesystem couldn't even look the file up: nothing was read.
+    CHECK_EQ_INT(pet_load(true, false, buf, 0, &pet), PET_LOAD_UNREADABLE, "nothing read");
+    CHECK(same(&pet, &before));
+}
+
+static void test_render_unreadable(void) {
+    pet_screen_t s;
+    memset(&s, 0x7f, sizeof(s));
+    pet_render_unreadable(&s);
+    CHECK(strcmp(s.top, "FILE ") == 0);
+    CHECK(strcmp(s.top_fallback, "FI") == 0);
+    CHECK(strcmp(s.bottom, "Error ") == 0);
+    CHECK(!s.bell);
+    CHECK(!s.sleep);
+    check_screen_fits(&s);
+}
+
 // "State survives a reset": a pet restored from its save file and caught up
 // to the clock is the pet that never stopped running, as long as the save is
 // younger than the catch-up cap. The face saves often enough for that.
@@ -568,6 +633,10 @@ int main(void) {
     test_save_round_trip();
     test_save_layout_is_fixed();
     test_unreadable_saves_are_rejected();
+    test_load_no_file_means_a_new_egg();
+    test_load_good_file();
+    test_load_existing_file_that_cannot_be_used_is_unreadable();
+    test_render_unreadable();
     test_reload_then_catch_up_equals_never_resetting();
     test_minute_by_minute_neglect_kills_within_two_days();
     test_should_save();

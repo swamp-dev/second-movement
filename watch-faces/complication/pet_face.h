@@ -52,6 +52,10 @@
  * ALARM (long) on the RIP screen only: hatch a new egg. RIP shows AGE and
  *              the days lived; short presses do nothing there.
  *
+ * FILE / Error means a saved pet exists but can't be read (a flash error, or
+ * a save from a newer firmware). The save is left alone and read again each
+ * time the face is opened. ALARM (long) gives up on it and hatches a new egg.
+ *
  * The rules and every rate live in lib/pet/pet.h.
  */
 
@@ -63,6 +67,7 @@ typedef struct {
     pet_state_t saved;  // the pet as last written to the save file
     uint32_t drawn_age; // the pet's age_minutes when the screen was last drawn
     bool has_pet;       // false until a save was loaded or the first egg was laid
+    bool unreadable;    // a save file exists but can't be used; it must not be overwritten
     uint8_t action;     // pet_action_t selected with LIGHT
     uint8_t page;       // pet_page_t on the bottom line
 } pet_face_state_t;

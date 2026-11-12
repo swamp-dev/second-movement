@@ -12,14 +12,16 @@ extern const struct lfs_config watch_lfs_cfg;
 // program fails as the hardware reports it: watch_storage_write returns false.
 // While fail_data_reads is set, reads fail outside rows 0 and 1, which hold the
 // superblock and root directory of a freshly formatted filesystem, so a file
-// can still be found and opened but not read.
+// can still be found and opened but not read. While fail_all_reads is set,
+// every read fails, so a file can't even be looked up.
 #define ROWS (NVMCTRL_RWWEE_PAGES / 4)
 static uint8_t flash[ROWS][NVMCTRL_ROW_SIZE];
 static bool fail_progs;
 static bool fail_data_reads;
+static bool fail_all_reads;
 
 bool watch_storage_read(uint32_t row, uint32_t offset, uint8_t *buffer, uint32_t size) {
-    if (fail_data_reads && row > 1) return false;
+    if (fail_all_reads || (fail_data_reads && row > 1)) return false;
     memcpy(buffer, &flash[row][offset], size);
     return true;
 }
@@ -61,6 +63,7 @@ static void fresh_filesystem(void) {
     memset(flash, 0xff, sizeof(flash));
     fail_progs = false;
     fail_data_reads = false;
+    fail_all_reads = false;
     // Not CHECKed: after formatting a blank flash, filesystem_init() returns
     // false even though the mount worked (its only caller ignores the result).
     // The writes and reads below fail if the filesystem isn't usable.
@@ -200,6 +203,31 @@ static void test_failed_read_line_releases_the_file(void) {
     CHECK_EQ_INT(offset, 3, "after the first line");
 }
 
+// A caller that must not overwrite a file it merely failed to look up needs
+// to tell "no such file" from "the flash didn't answer".
+static void test_absent_means_the_filesystem_said_so(void) {
+    char data[BIG];
+    fill(data, 'd');
+
+    fresh_filesystem();
+    CHECK(filesystem_file_is_absent("nothing"));
+    CHECK(filesystem_write_file("there", data, BIG));
+    CHECK(!filesystem_file_is_absent("there"));
+
+    remount();
+    fail_all_reads = true;
+    CHECK(!filesystem_file_is_absent("there"));
+    CHECK(!filesystem_file_is_absent("nothing"));
+    // The older calls can't tell the difference: both read as "no file".
+    CHECK(!filesystem_file_exists("there"));
+    CHECK_EQ_INT(filesystem_get_file_size("there"), -1, "lookup failed");
+    fail_all_reads = false;
+
+    CHECK(!filesystem_file_is_absent("there"));
+    CHECK(filesystem_file_is_absent("nothing"));
+    CHECK(file_is("there", data, BIG));
+}
+
 int main(void) {
     // A leaked handle trips littlefs's "file already open" assert on the next
     // open. The alarm is a backstop in case a bug hangs instead.
@@ -211,6 +239,7 @@ int main(void) {
     test_failed_read_releases_the_file();
     test_read_line();
     test_failed_read_line_releases_the_file();
+    test_absent_means_the_filesystem_said_so();
     unmount();
     return check_summary("test_filesystem");
 }

@@ -155,6 +155,9 @@ typedef struct {
 
 void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, pet_screen_t *screen);
 
+// The screen for PET_LOAD_UNREADABLE (see below): FILE / Error.
+void pet_render_unreadable(pet_screen_t *screen);
+
 // ---- Save file ----
 
 #define PET_SAVE_VERSION 1
@@ -166,6 +169,21 @@ void pet_serialize(const pet_state_t *pet, uint8_t buf[PET_SAVE_SIZE]);
 // Reads a save file. Returns false, leaving *pet untouched, if it's too
 // short, has an unknown version or holds out-of-range values.
 bool pet_deserialize(const uint8_t *buf, size_t length, pet_state_t *pet);
+
+typedef enum {
+    PET_LOAD_NO_SAVE = 0, // there is no save file: lay the first egg
+    PET_LOAD_OK,          // *pet holds the saved pet
+    PET_LOAD_UNREADABLE,  // a save file exists but can't be used: keep it
+} pet_load_t;
+
+// Decides what a save file is worth. file_exists is false only when the
+// filesystem said there is no such file; a failed lookup counts as existing.
+// read_ok says whether the file's first min(length, PET_SAVE_SIZE) bytes were
+// read into buf, and length is the file's size. A file that exists is never
+// PET_LOAD_NO_SAVE, so a flash error or a save from a newer firmware isn't
+// mistaken for "no pet yet" and overwritten. *pet is written only for
+// PET_LOAD_OK.
+pet_load_t pet_load(bool file_exists, bool read_ok, const uint8_t buf[PET_SAVE_SIZE], size_t length, pet_state_t *pet);
 
 // True when `pet` should be written out, given the copy last saved: its
 // stage or sleep changed, the clock went backward, or

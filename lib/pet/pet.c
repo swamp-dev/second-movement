@@ -216,6 +216,13 @@ void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, pe
     }
 }
 
+void pet_render_unreadable(pet_screen_t *screen) {
+    set_mood(screen, "FILE ", "FI");
+    strcpy(screen->bottom, "Error ");
+    screen->bell = false;
+    screen->sleep = false;
+}
+
 void pet_serialize(const pet_state_t *pet, uint8_t buf[PET_SAVE_SIZE]) {
     buf[0] = PET_SAVE_VERSION;
     buf[1] = pet->stage;
@@ -253,6 +260,12 @@ bool pet_deserialize(const uint8_t *buf, size_t length, pet_state_t *pet) {
     pet->last_update = read_u32(buf + 12);
     pet->remainder_seconds = buf[16];
     return true;
+}
+
+pet_load_t pet_load(bool file_exists, bool read_ok, const uint8_t buf[PET_SAVE_SIZE], size_t length, pet_state_t *pet) {
+    if (!file_exists) return PET_LOAD_NO_SAVE;
+    if (read_ok && pet_deserialize(buf, length, pet)) return PET_LOAD_OK;
+    return PET_LOAD_UNREADABLE;
 }
 
 bool pet_should_save(const pet_state_t *saved, const pet_state_t *pet) {

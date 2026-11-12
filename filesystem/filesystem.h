@@ -45,6 +45,15 @@ int32_t filesystem_get_free_space(void);
   */
 bool filesystem_file_exists(char *filename);
 
+/** @brief Checks that a file is missing, as opposed to impossible to look up.
+  * @param filename the file you wish to check
+  * @return true only if the filesystem answered that there is no such file; false if it
+  *         exists, or if the lookup itself failed (a flash error).
+  * @note filesystem_file_exists and filesystem_get_file_size report a failed lookup as
+  *       "no file". Use this before creating a file that must not replace an existing one.
+  */
+bool filesystem_file_is_absent(char *filename);
+
 /** @brief Removes a file on the filesystem.
   * @param filename the file you wish to remove
   * @return true if the file was deleted successfully; false otherwise
