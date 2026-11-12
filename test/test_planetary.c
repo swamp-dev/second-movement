@@ -232,12 +232,14 @@ static bool step(const place_t *p, const planetary_hour_t *from, int steps, plan
 // One press at a time, up to `max` times in direction `dir` (+1 or -1), from
 // the hour containing `t`: each press must land on the neighbouring hour, so no
 // hour is skipped or shown twice, whatever the hours' length (#5). Returns the
-// number of presses made before one failed (`max` if none did).
-static int presses_until_fail(const place_t *p, int64_t t, int dir, int max) {
+// number of presses made before one failed (`max` if none did), and the hour
+// the last press reached in *last if it isn't NULL.
+static int presses_until_fail(const place_t *p, int64_t t, int dir, int max, planetary_hour_t *last) {
     planetary_hour_t h, next;
     CHECK(at(p, t, &h));
-    for (int k = 1; k <= max; k++) {
-        if (!step(p, &h, dir, &next)) return k - 1;
+    int k;
+    for (k = 1; k <= max; k++) {
+        if (!step(p, &h, dir, &next)) break;
         bool ok = dir > 0 ? next.start == h.end : next.end == h.start;
         ok = ok && next.hour_number == (h.hour_number + 24 + dir) % 24
             && next.ruler == (h.ruler + 7 + dir) % 7;
@@ -246,11 +248,12 @@ static int presses_until_fail(const place_t *p, int64_t t, int dir, int max) {
                      next.hour_number, (long long)next.start, (long long)next.end);
         h = next;
     }
-    return max;
+    if (last) *last = h;
+    return k - 1;
 }
 
 static void check_presses(const place_t *p, int64_t t, int dir, int presses) {
-    CHECK_EQ_INT(presses_until_fail(p, t, dir, presses), presses, "%s: presses made", p->name);
+    CHECK_EQ_INT(presses_until_fail(p, t, dir, presses, NULL), presses, "%s: presses made", p->name);
 }
 
 // The #5 report: New York, Tuesday 15 December 2026 from 09:40, where day hours
@@ -302,8 +305,9 @@ static void test_step_everywhere(void) {
 // sunrise before polar night, at the offset Tromso uses on each. Near the edges
 // hours get very short or very long. From a week on the sunny side, presses
 // toward the edge each land on the neighbouring hour until the polar period
-// stops them, about a week later. From the last hour before the edge, two weeks
-// of presses back the other way all succeed.
+// stops them about a week later (172 to 174 presses with GCC 14). From the last
+// hour before the edge, two weeks of presses back the other way all succeed,
+// and stepping back as many presses as went forward returns to the start.
 static void test_step_through_polar_edges(void) {
     static const struct { int month, day, toward; int32_t offset; } edges[] = {
         {1, 22, -1, 3600},  // polar night ends about 15 January
@@ -317,13 +321,13 @@ static void test_step_through_polar_edges(void) {
         int64_t t = local_time(2026, edges[i].month, edges[i].day, 12, 0, p.offset);
         int dir = edges[i].toward;
 
-        int n = presses_until_fail(&p, t, dir, 24 * 14);
-        CHECK(n >= 24 * 6 && n <= 24 * 8);
-
-        planetary_hour_t h, last;
+        planetary_hour_t h, last, back;
         CHECK(at(&p, t, &h));
-        CHECK(step(&p, &h, dir * n, &last));
+        int n = presses_until_fail(&p, t, dir, 24 * 14, &last);
+        CHECK_EQ_INT(n >= 24 * 7 - 8 && n <= 24 * 7 + 8, 1, "edge %zu: %d presses to the polar stop", i, n);
+
         check_presses(&p, last.start, -dir, 24 * 14);
+        CHECK(step(&p, &last, -dir * n, &back) && same_hour(&back, &h));
     }
 }
 
