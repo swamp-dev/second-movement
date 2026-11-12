@@ -46,9 +46,21 @@ static void _catch_up(pet_face_state_t *state) {
     if (pet_should_save(&state->saved, &state->pet)) _save(state);
 }
 
+static void _load(pet_face_state_t *state) {
+    uint8_t buf[PET_SAVE_SIZE];
+    int32_t size = filesystem_get_file_size(PET_SAVE_FILE);
+    bool read_ok = size > 0 && filesystem_read_file(PET_SAVE_FILE, (char *)buf, sizeof(buf));
+    pet_load_t loaded = pet_load(size, read_ok, buf, &state->pet);
+
+    state->has_pet = loaded == PET_LOAD_OK;
+    state->unreadable = loaded == PET_LOAD_UNREADABLE;
+    if (state->has_pet) state->saved = state->pet;
+}
+
 static void _lay_egg(pet_face_state_t *state) {
     pet_init(&state->pet, movement_get_utc_timestamp());
     state->has_pet = true;
+    state->unreadable = false;
     state->action = PET_ACTION_FEED;
     state->page = PET_PAGE_ACTION;
     _save(state);
@@ -56,7 +68,8 @@ static void _lay_egg(pet_face_state_t *state) {
 
 static void _draw(pet_face_state_t *state) {
     pet_screen_t screen;
-    pet_render(&state->pet, (pet_action_t)state->action, (pet_page_t)state->page, &screen);
+    if (state->unreadable) pet_render_unreadable(&screen);
+    else pet_render(&state->pet, (pet_action_t)state->action, (pet_page_t)state->page, &screen);
     state->drawn_age = state->pet.age_minutes;
 
     watch_display_text_with_fallback(WATCH_POSITION_TOP, screen.top, screen.top_fallback);
@@ -75,14 +88,9 @@ void pet_face_setup(uint8_t watch_face_index, void **context_ptr) {
         memset(state, 0, sizeof(pet_face_state_t));
         *context_ptr = state;
 
-        uint8_t buf[PET_SAVE_SIZE];
-        if (filesystem_read_file(PET_SAVE_FILE, (char *)buf, sizeof(buf))) {
-            int32_t size = filesystem_get_file_size(PET_SAVE_FILE);
-            state->has_pet = pet_deserialize(buf, size > 0 ? (size_t)size : 0, &state->pet);
-            state->saved = state->pet;
-        }
-        // With no usable save, the first egg is laid on first activation, not
-        // here: setup runs at boot, often before the clock has been set.
+        _load(state);
+        // With no save, the first egg is laid on first activation, not here:
+        // setup runs at boot, often before the clock has been set.
     }
 }
 
@@ -91,6 +99,10 @@ void pet_face_activate(void *context) {
 
     if (watch_sleep_animation_is_running()) watch_stop_sleep_animation();
 
+    // Look again: an earlier read may have failed for a passing reason.
+    if (!state->has_pet) _load(state);
+
+    if (state->unreadable) return;
     if (!state->has_pet) _lay_egg(state);
     else _catch_up(state);
 
@@ -98,9 +110,36 @@ void pet_face_activate(void *context) {
     state->page = PET_PAGE_ACTION;
 }
 
+// There is no pet to act on, and the save file must stay as it is.
+static bool _unreadable_loop(movement_event_t event, pet_face_state_t *state) {
+    switch (event.event_type) {
+        case EVENT_ACTIVATE:
+        case EVENT_LOW_ENERGY_UPDATE:
+            _draw(state);
+            break;
+
+        case EVENT_ALARM_LONG_PRESS:
+            // The one way to replace the save, and a long press so it's deliberate.
+            _lay_egg(state);
+            _draw(state);
+            break;
+
+        case EVENT_TIMEOUT:
+            movement_move_to_face(0);
+            break;
+
+        default:
+            return movement_default_loop_handler(event);
+    }
+
+    return true;
+}
+
 bool pet_face_loop(movement_event_t event, void *context) {
     pet_face_state_t *state = (pet_face_state_t *)context;
     bool dead = state->pet.stage == PET_STAGE_DEAD;
+
+    if (state->unreadable) return _unreadable_loop(event, state);
 
     switch (event.event_type) {
         case EVENT_ACTIVATE:
@@ -181,5 +220,5 @@ movement_watch_face_advisory_t pet_face_advise(void *context) {
 
 void pet_face_resign(void *context) {
     pet_face_state_t *state = (pet_face_state_t *)context;
-    if (pet_should_save(&state->saved, &state->pet)) _save(state);
+    if (state->has_pet && pet_should_save(&state->saved, &state->pet)) _save(state);
 }
