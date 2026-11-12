@@ -249,10 +249,13 @@ static bool _planetary_hour_face_location(const planetary_hour_state_t *state, d
     return true;
 }
 
-static void _planetary_hour_face_display(const planetary_hour_t *hour, int32_t utc_offset)
+static void _planetary_hour_face_display(const planetary_hour_t *hour)
 {
     char buf[14];
     planetary_planet_t ruler = planetary_planets[hour->ruler];
+    // A browsed hour can be on the other side of a daylight saving change, so
+    // it is shown with the offset in force when it starts, not today's.
+    int32_t utc_offset = movement_get_timezone_offset_at_timestamp((uint32_t)hour->start);
     // Shown to the nearest minute, as sunrise_sunset_face rounds sunrise.
     watch_date_time_t disp = watch_utility_date_time_from_unix_time((uint32_t)(hour->start + 30), utc_offset);
 
@@ -315,7 +318,7 @@ static void _planetary_hour_face_update(planetary_hour_state_t *state)
         return;
     }
 
-    _planetary_hour_face_display(&state->shown, utc_offset);
+    _planetary_hour_face_display(&state->shown);
 }
 
 // ALARM and LIGHT presses: the next or previous planetary hour, by hour number
@@ -329,7 +332,7 @@ static void _planetary_hour_face_step(planetary_hour_state_t *state, int steps)
     // user has browsed; anything else (no hour shown yet, polar) starts afresh.
     if (state->shown_valid && _planetary_hour_face_location(state, &lat, &lon)
         && planetary_hour_step(&state->shown, steps, utc_offset, lat, lon, &state->shown))
-        _planetary_hour_face_display(&state->shown, utc_offset);
+        _planetary_hour_face_display(&state->shown);
     else
         _planetary_hour_face_update(state);
 }
