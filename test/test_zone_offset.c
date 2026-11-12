@@ -168,8 +168,38 @@ static void test_wall_clock_input_with_a_preferred_offset(void) {
     CHECK_EQ_INT(zone_offset_at_local_preferring(berlin, at(2026, 10, 25, 2, 30), 120), 120, "Berlin autumn, 02:30 from CEST");
     CHECK_EQ_INT(zone_offset_at_local_preferring(berlin, at(2026, 10, 25, 2, 30), 60), 60, "Berlin autumn, 02:30 from CET");
 
+    // Southern hemisphere: 02:30 on 5 April happens twice in Sydney.
+    const uzone_packed_t *sydney = &zone_defns[UTZ_SYDNEY];
+    CHECK_EQ_INT(zone_offset_at_local_preferring(sydney, at(2026, 4, 5, 2, 30), 660), 660, "Sydney autumn, 02:30 from AEDT");
+    CHECK_EQ_INT(zone_offset_at_local_preferring(sydney, at(2026, 4, 5, 2, 30), 600), 600, "Sydney autumn, 02:30 from AEST");
+
     // A preferred offset the zone never has, as after the zone itself was changed.
     CHECK_EQ_INT(zone_offset_at_local_preferring(&zone_defns[UTZ_KOLKATA], at(2026, 7, 1, 12, 0), -300), 330, "Kolkata from EST");
+}
+
+// The date-time `minutes` after the start of 2026, which must be within the year.
+static udatetime_t minutes_into_2026(int32_t minutes) {
+    static const uint8_t days[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    int32_t day = minutes / (24 * 60);
+    uint8_t month = 0;
+    while (day >= days[month]) day -= days[month++];
+    return at(2026, month + 1, day + 1, (minutes / 60) % 24, minutes % 60);
+}
+
+static void test_the_offset_in_force_is_always_kept(void) {
+    // Setting the clock to the time it already shows must not move it: in every
+    // zone, at every quarter hour of the year, the wall-clock time with the
+    // offset in force as the preferred one gives that offset back.
+    const int32_t day = 24 * 60;
+    for (size_t z = 0; z < NUM_ZONE_NAMES; z++) {
+        const uzone_packed_t *zone = &zone_defns[z];
+        // A day's margin at each end keeps the wall-clock time inside 2026.
+        for (int32_t utc = day; utc < 364 * day; utc += 15) {
+            int16_t offset = zone_offset_at_utc(zone, minutes_into_2026(utc));
+            int16_t kept = zone_offset_at_local_preferring(zone, minutes_into_2026(utc + offset), offset);
+            CHECK_EQ_INT(kept, offset, "zone %zu, %ld minutes into 2026", z, (long)utc);
+        }
+    }
 }
 
 static void test_each_zone_uses_one_clock_for_its_rules(void) {
@@ -190,5 +220,6 @@ int main(void) {
     test_standard_time_input();
     test_wall_clock_input();
     test_wall_clock_input_with_a_preferred_offset();
+    test_the_offset_in_force_is_always_kept();
     return check_summary("test_zone_offset");
 }
