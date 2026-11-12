@@ -116,3 +116,11 @@ int16_t zone_offset_at_local(const uzone_packed_t *zone, udatetime_t local) {
     _shift_minutes(&local, -offset);
     return zone_offset_at_utc(zone, local);
 }
+
+int16_t zone_offset_at_local_preferring(const uzone_packed_t *zone, udatetime_t local, int16_t preferred) {
+    udatetime_t utc = local;
+
+    _shift_minutes(&utc, -preferred);
+    if (zone_offset_at_utc(zone, utc) == preferred) return preferred;
+    return zone_offset_at_local(zone, local);
+}
