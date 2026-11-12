@@ -180,8 +180,14 @@ merged to `main` here (steps 1–5), never before, send it upstream as a pull
 request. An upstream PR is not an upstream sync: it never touches `main`
 here.
 
-Each Bash call is a new shell. Run step 1 from the main checkout, and start
-every later block with the `cd` shown.
+Each Bash call is a new shell, and the `../` paths below assume it starts
+in the main checkout. Every command run in the upstream worktree, including
+the ones given in prose, starts with this guard, so that a failed `cd` can't
+reset or delete anything in the main checkout:
+
+```bash
+cd ../sm-up-<N>-<slug> && [ "$(git branch --show-current)" = up/<N>-<slug> ] || exit 1
+```
 
 ### 1. Check that it's merged here and still needed upstream
 
@@ -205,7 +211,7 @@ ticket, remove the `upstream` label, and stop. Don't reopen the ticket.
 
 ```bash
 git worktree add ../sm-up-<N>-<slug> -b up/<N>-<slug> refs/remotes/upstream/main
-cd ../sm-up-<N>-<slug> && git branch --show-current   # must print up/<N>-<slug>
+cd ../sm-up-<N>-<slug> && [ "$(git branch --show-current)" = up/<N>-<slug> ] || exit 1
 git submodule update --init --recursive
 git cherry-pick -n <squash SHA from step 1>
 ```
@@ -214,12 +220,14 @@ The cherry-pick usually stops with conflicts, because the squash commit
 also touches files upstream doesn't have. That's expected. `-n` makes no
 commit and leaves no cherry-pick in progress, so `git cherry-pick --abort`
 won't work; to start over, run `git reset --hard HEAD && git clean -fd`
-and pick again.
+(after the guard) and pick again.
 
 Cut the change down to the fix:
 
 - **Keep** the fix itself. If the fix moved logic into a new `lib/<dir>`,
-  keep those files and their lines in the root `Makefile`.
+  keep those files and their lines in the root `Makefile`. Resolve a root
+  `Makefile` conflict by hand: take upstream's side and re-add only the
+  `-I` and `.c` lines for that `lib/<dir>`.
 - **Drop** every other change. For a path upstream lacks, run
   `git rm -rf -- <path>`. For a file upstream has, run
   `git checkout HEAD -- <path>`. The fork changed many shared files
@@ -233,19 +241,22 @@ Cut the change down to the fix:
   `filesystem/filesystem.c`). Take upstream's version with
   `git checkout HEAD -- <file>` and make the same fix in it.
 
-If the fix only makes sense on top of fork-only code, it can't go upstream.
+If nothing is left staged after dropping, or the fix only makes sense on
+top of fork-only code, it can't go upstream.
 Reset as above, say why in a comment on the ticket, remove the `upstream`
 label, and stop.
 
 Before committing, check what is staged:
 
 ```bash
-cd ../sm-up-<N>-<slug> && git status --short && git diff --cached --stat
+cd ../sm-up-<N>-<slug> && [ "$(git branch --show-current)" = up/<N>-<slug> ] || exit 1
+git add -A && git status --short && git diff --cached --stat
 git diff --cached | grep -nE '^\+.*(#[0-9]+|swamp-dev|KnightConfig)'
 ```
 
-The stat may list only files the fix needs, and the `grep` should print
-nothing you can't account for.
+`git add -A` stages hand-ported edits, which `git checkout HEAD --` left
+unstaged. The stat may list only files the fix needs, and the `grep` should
+print nothing you can't account for.
 
 Commit it as one commit whose message describes the bug and the fix.
 Don't write `#<N>` in the message or the PR body: on upstream that number
@@ -260,7 +271,7 @@ one foreground Bash call allows; run it in the background and wait for the
 last line.
 
 ```bash
-cd ../sm-up-<N>-<slug> && git branch --show-current   # must print up/<N>-<slug>
+cd ../sm-up-<N>-<slug> && [ "$(git branch --show-current)" = up/<N>-<slug> ] || exit 1
 nix=(nix --extra-experimental-features 'nix-command flakes' develop -c)   # drop if the toolchain is on PATH
 ok=0
 for board in sensorwatch_red sensorwatch_green sensorwatch_blue sensorwatch_pro; do
@@ -291,7 +302,8 @@ simulator check for the affected face on this branch.
 Write the body to a file outside the worktree, so it can't be committed.
 
 ```bash
-cd ../sm-up-<N>-<slug> && git push -u origin up/<N>-<slug>
+cd ../sm-up-<N>-<slug> && [ "$(git branch --show-current)" = up/<N>-<slug> ] || exit 1
+git push -u origin up/<N>-<slug>
 gh pr create -R joeycastillo/second-movement --base main \
   --head swamp-dev:up/<N>-<slug> --title "<summary>" --body-file <file outside the worktree>
 ```
@@ -320,6 +332,7 @@ If `gh label list -R swamp-dev/second-movement` doesn't show
 `gh label create upstream-sent -R swamp-dev/second-movement`.
 
 ```bash
+gh issue comment <N> -R swamp-dev/second-movement --body "Sent upstream: <upstream PR URL>"
 gh issue edit <N> -R swamp-dev/second-movement --remove-label upstream --add-label upstream-sent
 ```
 
@@ -329,11 +342,13 @@ go upstream:
 
 ### What the agent may do
 
-This section authorises the agent to open the upstream PR in step 4, and to
-comment on and relabel the ticket here, under these limits:
+This section authorises the agent to push the `up/` branch to the fork, open
+the upstream PR in step 4, and comment on and relabel the ticket here, under
+these limits:
 
 - only for a ticket labelled `upstream` whose fix step 1 showed as merged;
-- only for the ticket whose fix was merged in this session. Work through
+- only for the ticket whose fix was merged in this session, by the agent or
+  by the user. Work through
   the queue of older ones only when the user names the tickets, and a
   listing of that queue is never an instruction to work through it;
 - one upstream PR per ticket, one at a time, and never a second PR for a
@@ -345,7 +360,8 @@ comment on and relabel the ticket here, under these limits:
 When the upstream maintainers respond, or upstream's CI fails on the PR,
 tell the user and wait. The `up/` branch and its worktree stay until the
 upstream PR is merged or closed; then list them as leftovers for the user
-to remove.
+to remove (`git worktree remove --force`, since the worktree has
+submodules).
 
 ---
 
