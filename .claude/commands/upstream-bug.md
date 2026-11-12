@@ -7,8 +7,8 @@ argument-hint: "[ticket number]"
 
 Take **one** bug in code shared with `joeycastillo/second-movement` from
 ticket to merged fix here, then to an issue and a pull request upstream.
-`docs/workflow.md` is the source of truth for every step; this command only
-fixes the order and adds the upstream issue.
+`docs/workflow.md` is the source of truth. This command adds the triage
+order, the upstream issue, and closing our ticket if the merge didn't.
 
 Ticket: `$ARGUMENTS` (if empty, triage and pick one).
 
@@ -24,10 +24,13 @@ Progress:
 
 ## 1. Triage and pick
 
-Skip this step if a ticket number was given, but still check that it is
-open, labelled `upstream` and unclaimed.
+If a ticket number was given, skip the ranking. If that ticket is open,
+check it is labelled `upstream` and unclaimed. If it is closed, still
+labelled `upstream`, and its fix is merged, go to step 3.
 
 ```bash
+git remote get-url upstream || git remote add upstream https://github.com/joeycastillo/second-movement.git
+git fetch origin && git fetch upstream
 gh issue list -R swamp-dev/second-movement --state open --label upstream --limit 200 --json number,title,labels
 ```
 
@@ -37,8 +40,8 @@ them by:
 
 1. **Reach.** Code every build links (`movement.c`, `watch-library/`,
    `filesystem/`) or a face in upstream's default `movement_config.h` ranks
-   above a face few people build. The ticket's "In our build" line says
-   whether this fork runs the code.
+   above a face few people build. Break ties with the ticket's "In our
+   build" line.
 2. **Harm.** Wrong time or wrong alarm, lost or corrupted stored data, and
    memory errors rank above a wrong character on the display.
 3. **How often.** Normal use ranks above a rare input.
@@ -52,70 +55,80 @@ and go on without waiting.
 
 ## 2. Fix it here and merge
 
-Run the `/full-send` per-ticket loop for that ticket only:
-`/start-ticket <N>`, implement, `/finish-ticket`, hosted CI green,
-`/ship-ticket <P>`. Everything in `docs/workflow.md` applies (failing test
-first, simulator check, reviewers, `scripts/ci-local.sh`, merge authority).
+Run steps 1–5 of the `/full-send` per-ticket loop for that ticket only
+(this command's step 6 replaces its pause): `/start-ticket <N>`, implement,
+`/finish-ticket`, hosted CI green, `/ship-ticket <P>`. Everything in
+`docs/workflow.md` applies (failing test first, simulator check, reviewers,
+`scripts/ci-local.sh`, merge authority).
 
 Write the fix so it ports:
 
 - Before designing it, run `git diff upstream/main origin/main -- <files>`
   for the files you expect to touch. Where the fork's copy has diverged,
   keep the fix clear of the fork's own lines.
-- Keep new logic in its own `lib/<dir>` with no reference to this fork's
-  tickets, tests or process in the code that will go upstream.
+- Keep new logic in its own `lib/<dir>`, and keep this fork's tickets,
+  tests and process out of the code and comments that will go upstream.
 
-If the PR goes to the user to merge, or anything in `/full-send` § When to
-stop applies, stop there. Steps 3–5 need the fix merged to `main`.
+If anything in `/full-send` § When to stop applies, stop there. If the PR
+goes to the user to merge, wait; when they merge it in this session, go on
+to step 3.
 
 ## 3. Port and build
 
 Follow [`docs/workflow.md` § Upstream PRs](../../docs/workflow.md#upstream-prs)
 steps 1–3: check the fix is merged here and that upstream has neither the fix
 nor a PR for it, make `up/<N>-<slug>` off `upstream/main` with only the fix,
-and build all 8 board × display combinations. Host tests don't go upstream
-(it has no `test/`), so compile this fork's test file against the `up/`
-branch's sources once, outside the worktree, and say so in the PR.
+and build all 8 board × display combinations.
+
+Host tests don't go upstream (it has no `test/`). If the fix has one, build
+it once more from the main checkout with the `cc` line `make -C test` prints
+for it, with each `../lib/…` and `../utz/…` source and `-I` path pointed at
+the `up/` worktree and `-o` at a file outside both checkouts. It must pass.
 
 ## 4. Upstream issue, then upstream PR
 
-Invoking this command is the user's request for one issue and one PR on
-`joeycastillo/second-movement`, for this ticket. Search first:
+Invoking this command is the user's request for at most one issue and one PR
+on `joeycastillo/second-movement`, for this ticket. Look for an issue first,
+in this ticket's comments (an earlier run may have opened one) and upstream:
 
 ```bash
 gh issue list -R joeycastillo/second-movement --state all --search "<face or function> <symptom>"
 ```
 
-If an upstream issue already describes the bug, don't open another; the PR
-refers to that one.
+If an open upstream issue already describes the bug, don't open another; the
+PR says `Fixes #<that issue>`. If a closed one does, stop and tell the user.
 
 Otherwise open the issue. Write it for a maintainer who has never seen this
 fork: what goes wrong, steps to trigger it, observed and expected, where in
-the code, and the root cause in two or three sentences. Leave out this
-fork's ticket numbers as `#N` (on upstream they point elsewhere), local
-paths and process notes. End with a line saying it was found and written up
-with Claude Code. Body from a file outside any worktree:
+the code, and the root cause in two or three sentences. Claim only what was
+checked, and say how (host test, simulator). Don't write this fork's
+numbers as `#N` (upstream resolves them to its own issues); use full URLs.
+Leave out local paths and process notes. End with a line saying it was
+found and written up with Claude Code. Take the body from a file outside
+any worktree:
 
 ```bash
 gh issue create -R joeycastillo/second-movement --title "<summary>" --body-file <file>
 ```
 
 Then push the branch and open the PR as in § Upstream PRs step 4. Its body
-adds `Fixes #<upstream issue>` on its own line, what the change does, and
-how it was tested (builds, simulator steps, the host test here with the full
-URL of this fork's merged PR).
+is `Fixes #<upstream issue>` on its own line, a short statement of the bug
+and cause, what the change does, and how it was tested (builds, simulator
+steps, the host test here with the full URL of this fork's merged PR). The
+full bug report stays in the issue.
 
 ## 5. Record and close
 
+Do § Upstream PRs step 5 (comment and label swap), with this comment:
+`Sent upstream: issue <URL>, PR <URL>`. Then check the ticket is closed:
+
 ```bash
-gh issue comment <N> -R swamp-dev/second-movement --body "Sent upstream: issue <URL>, PR <URL>"
-gh issue edit <N> -R swamp-dev/second-movement --remove-label upstream --add-label upstream-sent
 gh issue view <N> -R swamp-dev/second-movement --json state -q .state
 ```
 
-Create the `upstream-sent` label first if it's missing. The merge in step 2
-normally closed the ticket through `Closes #N`. If it still prints `OPEN`
-and the fix is merged, close it:
+The merge in step 2 normally closed it through `Closes #N`. If it prints
+`OPEN` and the fix is merged, close it; the owner asked for this when
+adding the command:
 `gh issue close <N> -R swamp-dev/second-movement --reason completed`.
 
 ## 6. Status and stop
@@ -126,8 +139,8 @@ upstream PR is merged or closed). Then stop.
 
 ## Limits
 
-- One ticket, one upstream issue and one upstream PR per invocation. Never
-  loop over the queue.
+- One ticket, at most one upstream issue and one upstream PR per
+  invocation. Never loop over the queue.
 - Nothing else on the upstream repo: no comments, no replies to review, no
   pushes to the `up/` branch after the PR is open, no closing. When the
   maintainers respond or upstream CI fails, tell the user and wait.
