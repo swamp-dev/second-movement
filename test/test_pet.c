@@ -481,15 +481,12 @@ static void test_unreadable_saves_are_rejected(void) {
     CHECK(memcmp(&pet, &untouched, sizeof(pet)) == 0);
 }
 
-// "State survives a reset": a pet restored from its save file and caught up
-// to the clock is the pet that never stopped running, as long as the save is
-// younger than the catch-up cap. The face saves often enough for that.
 // ---- pet_load ----
 
 static void test_load_no_file_means_a_new_egg(void) {
     pet_state_t pet = baby(), before = pet;
     uint8_t buf[PET_SAVE_SIZE] = {0};
-    CHECK_EQ_INT(pet_load(-1, false, buf, &pet), PET_LOAD_NO_SAVE, "no file");
+    CHECK_EQ_INT(pet_load(false, false, buf, 0, &pet), PET_LOAD_NO_SAVE, "no file");
     CHECK(same(&pet, &before));
 }
 
@@ -499,7 +496,12 @@ static void test_load_good_file(void) {
     saved.fullness = 42;
     pet_serialize(&saved, buf);
     memset(&pet, 0, sizeof(pet));
-    CHECK_EQ_INT(pet_load(PET_SAVE_SIZE, true, buf, &pet), PET_LOAD_OK, "good file");
+    CHECK_EQ_INT(pet_load(true, true, buf, PET_SAVE_SIZE, &pet), PET_LOAD_OK, "good file");
+    CHECK(same(&pet, &saved));
+
+    // A longer file with the same version (fields appended later) still loads.
+    memset(&pet, 0, sizeof(pet));
+    CHECK_EQ_INT(pet_load(true, true, buf, PET_SAVE_SIZE + 8, &pet), PET_LOAD_OK, "longer file");
     CHECK(same(&pet, &saved));
 }
 
@@ -511,18 +513,19 @@ static void test_load_existing_file_that_cannot_be_used_is_unreadable(void) {
     pet_serialize(&good, buf);
 
     // The read itself failed (flash error), though the bytes would be fine.
-    CHECK_EQ_INT(pet_load(PET_SAVE_SIZE, false, buf, &pet), PET_LOAD_UNREADABLE, "read failed");
+    CHECK_EQ_INT(pet_load(true, false, buf, PET_SAVE_SIZE, &pet), PET_LOAD_UNREADABLE, "read failed");
     // Written by a newer firmware.
     buf[0] = PET_SAVE_VERSION + 1;
-    CHECK_EQ_INT(pet_load(PET_SAVE_SIZE, true, buf, &pet), PET_LOAD_UNREADABLE, "newer version");
+    CHECK_EQ_INT(pet_load(true, true, buf, PET_SAVE_SIZE, &pet), PET_LOAD_UNREADABLE, "newer version");
     buf[0] = PET_SAVE_VERSION;
     // Corrupt contents.
     buf[3] = PET_STAT_MAX + 1;
-    CHECK_EQ_INT(pet_load(PET_SAVE_SIZE, true, buf, &pet), PET_LOAD_UNREADABLE, "corrupt");
+    CHECK_EQ_INT(pet_load(true, true, buf, PET_SAVE_SIZE, &pet), PET_LOAD_UNREADABLE, "corrupt");
     buf[3] = good.fullness;
-    // Truncated, and empty (filesystem_read_file reports an empty file as a failed read).
-    CHECK_EQ_INT(pet_load(PET_SAVE_SIZE - 1, true, buf, &pet), PET_LOAD_UNREADABLE, "truncated");
-    CHECK_EQ_INT(pet_load(0, false, buf, &pet), PET_LOAD_UNREADABLE, "empty");
+    // Truncated.
+    CHECK_EQ_INT(pet_load(true, true, buf, PET_SAVE_SIZE - 1, &pet), PET_LOAD_UNREADABLE, "truncated");
+    // Empty, or the filesystem couldn't even look the file up: nothing was read.
+    CHECK_EQ_INT(pet_load(true, false, buf, 0, &pet), PET_LOAD_UNREADABLE, "nothing read");
     CHECK(same(&pet, &before));
 }
 
@@ -538,6 +541,9 @@ static void test_render_unreadable(void) {
     check_screen_fits(&s);
 }
 
+// "State survives a reset": a pet restored from its save file and caught up
+// to the clock is the pet that never stopped running, as long as the save is
+// younger than the catch-up cap. The face saves often enough for that.
 static void test_reload_then_catch_up_equals_never_resetting(void) {
     CHECK(PET_SAVE_INTERVAL_SECONDS < PET_MAX_CATCHUP_SECONDS);
 
