@@ -8,10 +8,14 @@ LDLIBS := -lm
 
 # One program per test file: add test_<name> to TESTS and list its sources
 # as test_<name>_SRCS.
-TESTS := test_zodiac test_planetary test_pet
+TESTS := test_zodiac test_planetary test_pet test_filesystem
 test_zodiac_SRCS := test_zodiac.c ../lib/zodiac/zodiac.c ../lib/sunriset/sunriset.c
 test_planetary_SRCS := test_planetary.c ../lib/planetary/planetary.c ../lib/sunriset/sunriset.c
 test_pet_SRCS := test_pet.c ../lib/pet/pet.c
+# filesystem.c with real littlefs, over a RAM flash; stubs/ stands in for the
+# watch and movement headers it includes.
+test_filesystem_SRCS := test_filesystem.c ../filesystem/filesystem.c ../littlefs/lfs.c ../littlefs/lfs_util.c ../lib/base64/base64.c
+build/test_filesystem: CPPFLAGS += -Istubs -I../filesystem -I../littlefs -I../lib/base64
 
 .PHONY: test clean
 test: $(addprefix build/,$(TESTS))
@@ -20,7 +24,7 @@ test: $(addprefix build/,$(TESTS))
 .SECONDEXPANSION:
 # Any header in test/ or lib/ triggers a rebuild, so a header-only change is never
 # tested against a stale binary.
-HEADERS := $(wildcard *.h ../lib/*/*.h)
+HEADERS := $(wildcard *.h stubs/*.h ../lib/*/*.h ../filesystem/*.h ../littlefs/*.h)
 
 build/%: $$($$*_SRCS) $(HEADERS)
 	@mkdir -p build

@@ -22,6 +22,7 @@
  * SOFTWARE.
  */
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,6 +36,7 @@
 #define min(x, y) ((x) > (y) ? (y) : (x))
 #endif
 
+// littlefs block-device callbacks: 0 on success, a negative lfs_error on failure.
 int lfs_storage_read(const struct lfs_config *cfg, lfs_block_t block, lfs_off_t off, void *buffer, lfs_size_t size);
 int lfs_storage_prog(const struct lfs_config *cfg, lfs_block_t block, lfs_off_t off, const void *buffer, lfs_size_t size);
 int lfs_storage_erase(const struct lfs_config *cfg, lfs_block_t block);
@@ -42,22 +44,22 @@ int lfs_storage_sync(const struct lfs_config *cfg);
 
 int lfs_storage_read(const struct lfs_config *cfg, lfs_block_t block, lfs_off_t off, void *buffer, lfs_size_t size) {
     (void) cfg;
-    return !watch_storage_read(block, off, (void *)buffer, size);
+    return watch_storage_read(block, off, (void *)buffer, size) ? LFS_ERR_OK : LFS_ERR_IO;
 }
 
 int lfs_storage_prog(const struct lfs_config *cfg, lfs_block_t block, lfs_off_t off, const void *buffer, lfs_size_t size) {
     (void) cfg;
-    return !watch_storage_write(block, off, (void *)buffer, size);
+    return watch_storage_write(block, off, (void *)buffer, size) ? LFS_ERR_OK : LFS_ERR_IO;
 }
 
 int lfs_storage_erase(const struct lfs_config *cfg, lfs_block_t block) {
     (void) cfg;
-    return !watch_storage_erase(block);
+    return watch_storage_erase(block) ? LFS_ERR_OK : LFS_ERR_IO;
 }
 
 int lfs_storage_sync(const struct lfs_config *cfg) {
     (void) cfg;
-    return !watch_storage_sync();
+    return watch_storage_sync() ? LFS_ERR_OK : LFS_ERR_IO;
 }
 
 const struct lfs_config watch_lfs_cfg = {
@@ -126,7 +128,7 @@ static int filesystem_ls(lfs_t *lfs, const char *path) {
             default:           printf("?    "); break;
         }
 
-        printf("%4ld bytes ", info.size);
+        printf("%4" PRIu32 " bytes ", info.size);
 
         printf("%s\r\n", info.name);
     }
@@ -149,7 +151,7 @@ bool filesystem_init(void) {
         err = lfs_format(&eeprom_filesystem, &watch_lfs_cfg);
         if (err < 0) return false;
         err = lfs_mount(&eeprom_filesystem, &watch_lfs_cfg) == LFS_ERR_OK;
-        printf("Filesystem mounted with %ld bytes free.\r\n", filesystem_get_free_space());
+        printf("Filesystem mounted with %" PRId32 " bytes free.\r\n", filesystem_get_free_space());
     }
 
     return err == LFS_ERR_OK;
@@ -167,7 +169,7 @@ int _filesystem_format(void) {
 
     err = lfs_mount(&eeprom_filesystem, &watch_lfs_cfg);
     if (err < 0) return err;
-    printf("Filesystem re-mounted with %ld bytes free.\r\n", filesystem_get_free_space());
+    printf("Filesystem re-mounted with %" PRId32 " bytes free.\r\n", filesystem_get_free_space());
     return 0;
 }
 
@@ -202,9 +204,10 @@ bool filesystem_read_file(char *filename, char *buf, int32_t length) {
     if (file_size > 0) {
         int err = lfs_file_open(&eeprom_filesystem, &file, filename, LFS_O_RDONLY);
         if (err < 0) return false;
-        err = lfs_file_read(&eeprom_filesystem, &file, buf, min(length, file_size));
-        if (err < 0) return false;
-        return lfs_file_close(&eeprom_filesystem, &file) == LFS_ERR_OK;
+        lfs_ssize_t read = lfs_file_read(&eeprom_filesystem, &file, buf, min(length, file_size));
+        // Close on every path: `file` is shared, and littlefs can't reopen it while it's open.
+        err = lfs_file_close(&eeprom_filesystem, &file);
+        return read >= 0 && err == LFS_ERR_OK;
     }
 
     return false;
@@ -216,10 +219,11 @@ bool filesystem_read_line(char *filename, char *buf, int32_t *offset, int32_t le
     if (file_size > 0) {
         int err = lfs_file_open(&eeprom_filesystem, &file, filename, LFS_O_RDONLY);
         if (err < 0) return false;
-        err = lfs_file_seek(&eeprom_filesystem, &file, *offset, LFS_SEEK_SET);
-        if (err < 0) return false;
-        err = lfs_file_read(&eeprom_filesystem, &file, buf, min(length - 1, file_size - *offset));
-        if (err < 0) return false;
+        lfs_soff_t pos = lfs_file_seek(&eeprom_filesystem, &file, *offset, LFS_SEEK_SET);
+        lfs_ssize_t read = pos < 0 ? pos : lfs_file_read(&eeprom_filesystem, &file, buf, min(length - 1, file_size - *offset));
+        // Close on every path: `file` is shared, and littlefs can't reopen it while it's open.
+        err = lfs_file_close(&eeprom_filesystem, &file);
+        if (read < 0 || err != LFS_ERR_OK) return false;
         for(int i = 0; i < length; i++) {
             (*offset)++;
             if (buf[i] == '\n') {
@@ -227,7 +231,7 @@ bool filesystem_read_line(char *filename, char *buf, int32_t *offset, int32_t le
                 break;
             }
         }
-        return lfs_file_close(&eeprom_filesystem, &file) == LFS_ERR_OK;
+        return true;
     }
 
     return false;
@@ -251,30 +255,33 @@ static void filesystem_cat(char *filename) {
     }
 }
 
-bool filesystem_write_file(char *filename, char *text, int32_t length) {
+// littlefs commits a file only when it's closed (or synced), and a write that
+// fails marks the file errored so the close commits nothing. So closing after a
+// failed write keeps the old contents, and it must still happen: `file` is
+// shared, and littlefs can't reopen it while it's open.
+static bool _filesystem_write(char *filename, int flags, char *text, int32_t length) {
+    // littlefs takes the length as unsigned and refuses a wrapped one with
+    // LFS_ERR_FBIG without marking the file errored, so the close would commit
+    // the truncation.
+    if (length < 0) return false;
     if (filesystem_get_free_space() <= 256) {
         printf("No free space!\n");
-        return false;    
+        return false;
     }
 
-    int err = lfs_file_open(&eeprom_filesystem, &file, filename, LFS_O_RDWR | LFS_O_CREAT | LFS_O_TRUNC);
+    int err = lfs_file_open(&eeprom_filesystem, &file, filename, flags);
     if (err < 0) return false;
-    err = lfs_file_write(&eeprom_filesystem, &file, text, length);
-    if (err < 0) return false;
-    return lfs_file_close(&eeprom_filesystem, &file) == LFS_ERR_OK;
+    lfs_ssize_t written = lfs_file_write(&eeprom_filesystem, &file, text, length);
+    err = lfs_file_close(&eeprom_filesystem, &file);
+    return written == length && err == LFS_ERR_OK;
+}
+
+bool filesystem_write_file(char *filename, char *text, int32_t length) {
+    return _filesystem_write(filename, LFS_O_RDWR | LFS_O_CREAT | LFS_O_TRUNC, text, length);
 }
 
 bool filesystem_append_file(char *filename, char *text, int32_t length) {
-    if (filesystem_get_free_space() <= 256) {
-        printf("No free space!\n");
-        return false;    
-    }
-
-    int err = lfs_file_open(&eeprom_filesystem, &file, filename, LFS_O_WRONLY | LFS_O_CREAT | LFS_O_APPEND);
-    if (err < 0) return false;
-    err = lfs_file_write(&eeprom_filesystem, &file, text, length);
-    if (err < 0) return false;
-    return lfs_file_close(&eeprom_filesystem, &file) == LFS_ERR_OK;
+    return _filesystem_write(filename, LFS_O_WRONLY | LFS_O_CREAT | LFS_O_APPEND, text, length);
 }
 
 int filesystem_cmd_ls(int argc, char *argv[]) {
@@ -321,7 +328,7 @@ int filesystem_cmd_b64encode(int argc, char *argv[]) {
 int filesystem_cmd_df(int argc, char *argv[]) {
     (void) argc;
     (void) argv;
-    printf("free space: %ld bytes\r\n", filesystem_get_free_space());
+    printf("free space: %" PRId32 " bytes\r\n", filesystem_get_free_space());
     return 0;
 }
 
