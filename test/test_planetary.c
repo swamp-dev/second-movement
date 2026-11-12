@@ -229,17 +229,15 @@ static bool step(const place_t *p, const planetary_hour_t *from, int steps, plan
     return planetary_hour_step(from, steps, p->offset, p->lat, p->lon, h);
 }
 
-// One press at a time, `presses` times in direction `dir` (+1 or -1), from the
-// hour containing `t`: each press must land on the neighbouring hour, so no hour
-// is skipped or shown twice, whatever the hours' length (#5).
-static void check_presses(const place_t *p, int64_t t, int dir, int presses) {
+// One press at a time, up to `max` times in direction `dir` (+1 or -1), from
+// the hour containing `t`: each press must land on the neighbouring hour, so no
+// hour is skipped or shown twice, whatever the hours' length (#5). Returns the
+// number of presses made before one failed (`max` if none did).
+static int presses_until_fail(const place_t *p, int64_t t, int dir, int max) {
     planetary_hour_t h, next;
     CHECK(at(p, t, &h));
-    for (int k = 1; k <= presses; k++) {
-        if (!step(p, &h, dir, &next)) {
-            CHECK_EQ_INT(k, 0, "%s: press %d failed", p->name, k);
-            return;
-        }
+    for (int k = 1; k <= max; k++) {
+        if (!step(p, &h, dir, &next)) return k - 1;
         bool ok = dir > 0 ? next.start == h.end : next.end == h.start;
         ok = ok && next.hour_number == (h.hour_number + 24 + dir) % 24
             && next.ruler == (h.ruler + 7 + dir) % 7;
@@ -248,6 +246,11 @@ static void check_presses(const place_t *p, int64_t t, int dir, int presses) {
                      next.hour_number, (long long)next.start, (long long)next.end);
         h = next;
     }
+    return max;
+}
+
+static void check_presses(const place_t *p, int64_t t, int dir, int presses) {
+    CHECK_EQ_INT(presses_until_fail(p, t, dir, presses), presses, "%s: presses made", p->name);
 }
 
 // The #5 report: New York, Tuesday 15 December 2026 from 09:40, where day hours
@@ -268,6 +271,7 @@ static void test_step_forward_short_and_long_hours(void) {
     planetary_hour_t clock;
     CHECK(at(&new_york, local_time(2026, 12, 15, 9, 40, new_york.offset) + 3 * 3600, &clock));
     CHECK(clock.hour_number != s.hour_number);
+    CHECK(clock.start != s.start);
 
     // Two days forward from there, across sunsets, midnights and sunrises.
     check_presses(&new_york, local_time(2026, 12, 15, 9, 40, new_york.offset), +1, 48);
@@ -290,6 +294,36 @@ static void test_step_everywhere(void) {
             check_presses(&places[i], t, +1, 24 * 7);
             check_presses(&places[i], t, -1, 24 * 7);
         }
+    }
+}
+
+// Tromso's four polar edges (#32): the first sunrise after polar night, the
+// last sunset before the midnight sun, the first sunset after it, and the last
+// sunrise before polar night, at the offset Tromso uses on each. Near the edges
+// hours get very short or very long. From a week on the sunny side, presses
+// toward the edge each land on the neighbouring hour until the polar period
+// stops them, about a week later. From the last hour before the edge, two weeks
+// of presses back the other way all succeed.
+static void test_step_through_polar_edges(void) {
+    static const struct { int month, day, toward; int32_t offset; } edges[] = {
+        {1, 22, -1, 3600},  // polar night ends about 15 January
+        {5, 10, +1, 7200},  // midnight sun starts about 17 May
+        {8, 2, -1, 7200},   // midnight sun ends about 26 July
+        {11, 20, +1, 3600}, // polar night starts about 27 November
+    };
+    for (size_t i = 0; i < sizeof edges / sizeof edges[0]; i++) {
+        place_t p = tromso;
+        p.offset = edges[i].offset;
+        int64_t t = local_time(2026, edges[i].month, edges[i].day, 12, 0, p.offset);
+        int dir = edges[i].toward;
+
+        int n = presses_until_fail(&p, t, dir, 24 * 14);
+        CHECK(n >= 24 * 6 && n <= 24 * 8);
+
+        planetary_hour_t h, last;
+        CHECK(at(&p, t, &h));
+        CHECK(step(&p, &h, dir * n, &last));
+        check_presses(&p, last.start, -dir, 24 * 14);
     }
 }
 
@@ -405,6 +439,7 @@ int main(void) {
     test_step_forward_short_and_long_hours();
     test_step_backward_across_sunrise_sunset_midnight();
     test_step_everywhere();
+    test_step_through_polar_edges();
     test_step_many_equals_repeated_single();
     test_step_into_polar_day();
     test_step_back_into_polar_night();
