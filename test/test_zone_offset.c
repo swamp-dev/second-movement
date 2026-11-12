@@ -111,7 +111,29 @@ static void test_each_zone_uses_one_clock_for_its_rules(void) {
     }
 }
 
+static void test_unix_time_input(void) {
+    const uzone_packed_t *new_york = &zone_defns[UTZ_NEW_YORK];
+    // Planetary hours at New York on the night clocks go back (06:00 UTC on
+    // 1 November 2026): one starts at 1:48 EDT, the next at 1:56 EST.
+    CHECK_EQ_INT(zone_offset_at_unix_time(new_york, 1793512077), -240, "New York, 05:47:57 UTC");
+    CHECK_EQ_INT(zone_offset_at_unix_time(new_york, 1793516141), -300, "New York, 06:55:41 UTC");
+    CHECK_EQ_INT(zone_offset_at_unix_time(new_york, 1793512799), -240, "New York autumn, a second before");
+    CHECK_EQ_INT(zone_offset_at_unix_time(new_york, 1793512800), -300, "New York autumn, at the change");
+    CHECK_EQ_INT(zone_offset_at_unix_time(new_york, 1772953199), -300, "New York spring, a second before");
+    CHECK_EQ_INT(zone_offset_at_unix_time(new_york, 1772953200), -240, "New York spring, at the change");
+
+    const uzone_packed_t *berlin = &zone_defns[UTZ_BERLIN];
+    CHECK_EQ_INT(zone_offset_at_unix_time(berlin, 1774745999), 60, "Berlin spring, a second before");
+    CHECK_EQ_INT(zone_offset_at_unix_time(berlin, 1774746000), 120, "Berlin spring, at the change");
+
+    // The date conversion: a leap day, a year end, and a zone with no rules.
+    CHECK_EQ_INT(zone_offset_at_unix_time(berlin, 1835438400), 60, "Berlin, 29 February 2028");
+    CHECK_EQ_INT(zone_offset_at_unix_time(&zone_defns[UTZ_AUCKLAND], 1767186000), 780, "Auckland, new year");
+    CHECK_EQ_INT(zone_offset_at_unix_time(&zone_defns[UTZ_KOLKATA], 1782907200), 330, "Kolkata");
+}
+
 int main(void) {
+    test_unix_time_input();
     test_each_zone_uses_one_clock_for_its_rules();
     test_changes_happen_at_the_iana_instant();
     test_zone_without_rules();
