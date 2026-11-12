@@ -141,6 +141,9 @@ run `make install`, or copy `build/firmware.uf2` onto `WATCHBOOT`.
   ```
   Upstream syncs are the owner's call. Merge, don't rebase, and never sync
   as part of a ticket.
+- A fix for a ticket labelled `upstream` (a bug in code shared with
+  upstream) also goes to upstream as a PR after it merges here:
+  [workflow § Upstream PRs](docs/workflow.md#upstream-prs).
 
 ## Testing
 
