@@ -179,6 +179,10 @@ bool filesystem_file_exists(char *filename) {
     return info.type == LFS_TYPE_REG;
 }
 
+bool filesystem_file_is_absent(char *filename) {
+    return lfs_stat(&eeprom_filesystem, filename, &info) == LFS_ERR_NOENT;
+}
+
 bool filesystem_rm(char *filename) {
     info.type = 0;
     lfs_stat(&eeprom_filesystem, filename, &info);

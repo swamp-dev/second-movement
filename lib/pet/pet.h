@@ -176,12 +176,14 @@ typedef enum {
     PET_LOAD_UNREADABLE,  // a save file exists but can't be used: keep it
 } pet_load_t;
 
-// Decides what a save file is worth. file_size is negative when there is no
-// file; read_ok says whether its first min(file_size, PET_SAVE_SIZE) bytes
-// were read into buf. A file that exists is never PET_LOAD_NO_SAVE, so a
-// flash error or a save from a newer firmware isn't mistaken for "no pet
-// yet" and overwritten. *pet is written only for PET_LOAD_OK.
-pet_load_t pet_load(int32_t file_size, bool read_ok, const uint8_t buf[PET_SAVE_SIZE], pet_state_t *pet);
+// Decides what a save file is worth. file_exists is false only when the
+// filesystem said there is no such file; a failed lookup counts as existing.
+// read_ok says whether the file's first min(length, PET_SAVE_SIZE) bytes were
+// read into buf, and length is the file's size. A file that exists is never
+// PET_LOAD_NO_SAVE, so a flash error or a save from a newer firmware isn't
+// mistaken for "no pet yet" and overwritten. *pet is written only for
+// PET_LOAD_OK.
+pet_load_t pet_load(bool file_exists, bool read_ok, const uint8_t buf[PET_SAVE_SIZE], size_t length, pet_state_t *pet);
 
 // True when `pet` should be written out, given the copy last saved: its
 // stage or sleep changed, the clock went backward, or

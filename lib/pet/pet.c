@@ -262,9 +262,9 @@ bool pet_deserialize(const uint8_t *buf, size_t length, pet_state_t *pet) {
     return true;
 }
 
-pet_load_t pet_load(int32_t file_size, bool read_ok, const uint8_t buf[PET_SAVE_SIZE], pet_state_t *pet) {
-    if (file_size < 0) return PET_LOAD_NO_SAVE;
-    if (read_ok && pet_deserialize(buf, (size_t)file_size, pet)) return PET_LOAD_OK;
+pet_load_t pet_load(bool file_exists, bool read_ok, const uint8_t buf[PET_SAVE_SIZE], size_t length, pet_state_t *pet) {
+    if (!file_exists) return PET_LOAD_NO_SAVE;
+    if (read_ok && pet_deserialize(buf, length, pet)) return PET_LOAD_OK;
     return PET_LOAD_UNREADABLE;
 }
 
