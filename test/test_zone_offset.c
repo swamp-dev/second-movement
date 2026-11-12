@@ -1,6 +1,9 @@
 // Host tests for lib/zone_offset, against the real utz zone table. The
 // expected changes are the IANA tz database's for 2026.
 
+#define _POSIX_C_SOURCE 200809L  // gmtime_r
+#include <time.h>
+
 #include "check.h"
 #include "zone_offset.h"
 #include "zones.h"
@@ -126,18 +129,39 @@ static void test_unix_time_input(void) {
     CHECK_EQ_INT(zone_offset_at_unix_time(berlin, 1774745999), 60, "Berlin spring, a second before");
     CHECK_EQ_INT(zone_offset_at_unix_time(berlin, 1774746000), 120, "Berlin spring, at the change");
 
-    // The date conversion: a leap day, a year end, and a zone with no rules.
+    // A leap day, a year end, and a zone with no rules.
     CHECK_EQ_INT(zone_offset_at_unix_time(berlin, 1835438400), 60, "Berlin, 29 February 2028");
     CHECK_EQ_INT(zone_offset_at_unix_time(&zone_defns[UTZ_AUCKLAND], 1767186000), 780, "Auckland, new year");
     CHECK_EQ_INT(zone_offset_at_unix_time(&zone_defns[UTZ_KOLKATA], 1782907200), 330, "Kolkata");
 }
 
+// The date conversion, against the C library's: every 3593 seconds from 2000
+// to 2099 (so every day, at a time of day that drifts), in zones whose rules
+// are in local time and in UTC, north and south.
+static void test_unix_time_matches_the_calendar(void) {
+    static const uint8_t zones[] = {UTZ_NEW_YORK, UTZ_BERLIN, UTZ_AUCKLAND, UTZ_SANTIAGO};
+    int mismatches = 0;
+    for (uint32_t t = 946684800; t < 4102444800u - 3593; t += 3593) {
+        time_t seconds = (time_t)t;
+        struct tm tm;
+        gmtime_r(&seconds, &tm);
+        udatetime_t utc = at((uint16_t)(tm.tm_year + 1900), (uint8_t)(tm.tm_mon + 1), (uint8_t)tm.tm_mday,
+                             (uint8_t)tm.tm_hour, (uint8_t)tm.tm_min);
+        for (size_t z = 0; z < sizeof(zones); z++) {
+            const uzone_packed_t *zone = &zone_defns[zones[z]];
+            if (zone_offset_at_unix_time(zone, t) != zone_offset_at_utc(zone, utc)) mismatches++;
+        }
+    }
+    CHECK_EQ_INT(mismatches, 0, "offsets differing from the calendar date's, 2000-2099");
+}
+
 int main(void) {
-    test_unix_time_input();
     test_each_zone_uses_one_clock_for_its_rules();
     test_changes_happen_at_the_iana_instant();
     test_zone_without_rules();
     test_local_day_in_another_year();
     test_standard_time_input();
+    test_unix_time_input();
+    test_unix_time_matches_the_calendar();
     return check_summary("test_zone_offset");
 }
