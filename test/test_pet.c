@@ -713,6 +713,44 @@ static void test_a_feed_right_after_a_save_is_written_one_gap_later(void) {
     CHECK_EQ_INT(face.writes, 1, "writes with nothing more done");
 }
 
+// bEd then GEt UP leaves the pet as it was saved, so there is nothing to
+// write, however long the face then waits.
+static void test_bed_then_get_up_right_after_a_save_writes_nothing(void) {
+    fake_face_t face = {.pet = baby()};
+    uint32_t now = T0 + 5 * HOUR; // awake long enough to be tired
+    pet_advance_to(&face.pet, now);
+    face.saved = face.pet;
+
+    fake_face_step(&face, ++now, PET_ACTION_LIGHTS);
+    CHECK(face.pet.asleep);
+    fake_face_step(&face, ++now, PET_ACTION_LIGHTS);
+    CHECK(!face.pet.asleep);
+
+    for (uint32_t i = 0; i < 5 * PET_SAVE_MIN_GAP_SECONDS; i++) fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, 0, "writes after bEd then GEt UP");
+}
+
+// bEd alone is a change, and is written once when the gap is up.
+static void test_bed_right_after_a_save_is_written_one_gap_later(void) {
+    fake_face_t face = {.pet = baby()};
+    uint32_t now = T0 + 5 * HOUR; // awake long enough to be tired
+    pet_advance_to(&face.pet, now);
+    face.saved = face.pet;
+
+    fake_face_step(&face, ++now, PET_ACTION_LIGHTS);
+    CHECK(face.pet.asleep);
+    CHECK_EQ_INT(face.writes, 0, "writes right after bEd");
+
+    for (uint32_t i = 1; i < PET_SAVE_MIN_GAP_SECONDS - 1; i++) fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, 0, "writes just before the gap is up");
+    fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, 1, "writes when the gap is up");
+    CHECK(face.saved.asleep);
+
+    for (uint32_t i = 0; i < 5 * PET_SAVE_MIN_GAP_SECONDS; i++) fake_face_step(&face, ++now, NO_PRESS);
+    CHECK_EQ_INT(face.writes, 1, "writes with nothing more done");
+}
+
 int main(void) {
     test_egg_hatches_with_full_stats();
     test_ignored_pet_needs_attention_after_eight_waking_hours();
@@ -749,5 +787,7 @@ int main(void) {
     test_a_change_waits_for_the_gap_since_the_last_save();
     test_an_hour_of_bed_presses_is_rate_limited_and_nothing_is_lost();
     test_a_feed_right_after_a_save_is_written_one_gap_later();
+    test_bed_then_get_up_right_after_a_save_writes_nothing();
+    test_bed_right_after_a_save_is_written_one_gap_later();
     return check_summary("test_pet");
 }
