@@ -124,3 +124,26 @@ int16_t zone_offset_at_local_preferring(const uzone_packed_t *zone, udatetime_t 
     if (zone_offset_at_utc(zone, utc) == preferred) return preferred;
     return zone_offset_at_local(zone, local);
 }
+
+int16_t zone_offset_at_unix_time(const uzone_packed_t *zone, uint32_t unix_time) {
+    // Days to a civil date, after Howard Hinnant's civil_from_days.
+    uint32_t z = unix_time / 86400 + 719468;
+    uint32_t era = z / 146097;
+    uint32_t doe = z - era * 146097;
+    uint32_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    uint32_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    uint32_t mp = (5 * doy + 2) / 153;
+    uint32_t month = mp < 10 ? mp + 3 : mp - 9;
+    uint32_t year = yoe + era * 400 + (month <= 2);
+    uint32_t second_of_day = unix_time % 86400;
+
+    udatetime_t utc = {0};
+    utc.date.year = (uint8_t)UYEAR_FROM_YEAR(year);
+    utc.date.month = (uint8_t)month;
+    utc.date.dayofmonth = (uint8_t)(doy - (153 * mp + 2) / 5 + 1);
+    utc.date.dayofweek = dayofweek(utc.date.year, utc.date.month, utc.date.dayofmonth);
+    utc.time.hour = (uint8_t)(second_of_day / 3600);
+    utc.time.minute = (uint8_t)(second_of_day % 3600 / 60);
+    utc.time.second = (uint8_t)(second_of_day % 60);
+    return zone_offset_at_utc(zone, utc);
+}

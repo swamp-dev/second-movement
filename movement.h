@@ -343,6 +343,9 @@ int32_t movement_get_current_timezone_offset_for_zone(uint8_t zone_index);
 int32_t movement_get_current_timezone_offset(void);
 int32_t movement_get_timezone_offset_for_date_in_zone(watch_date_time_t date_time, uint8_t zone_index);
 int32_t movement_get_timezone_offset_for_date(watch_date_time_t date_time);
+/// The offset in force in the watch's time zone at a UTC timestamp, which may
+/// be on the other side of a daylight saving change from now.
+int32_t movement_get_timezone_offset_at_timestamp(uint32_t utc_timestamp);
 
 int32_t movement_get_timezone_index(void);
 void movement_set_timezone_index(uint8_t value);

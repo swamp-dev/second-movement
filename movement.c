@@ -673,6 +673,10 @@ int32_t movement_get_timezone_offset_for_date(watch_date_time_t date_time) {
     return movement_get_timezone_offset_for_date_in_zone(date_time, movement_state.settings.bit.time_zone);
 }
 
+int32_t movement_get_timezone_offset_at_timestamp(uint32_t utc_timestamp) {
+    return (int32_t)zone_offset_at_unix_time(&zone_defns[movement_state.settings.bit.time_zone], utc_timestamp) * 60;
+}
+
 int32_t movement_get_timezone_index(void) {
     return movement_state.settings.bit.time_zone;
 }
