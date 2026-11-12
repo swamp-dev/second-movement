@@ -82,6 +82,7 @@ INCLUDES += \
   -I./lib/planetary \
   -I./lib/sun_events \
   -I./lib/pet \
+  -I./lib/zone_offset \
   -I./watch-library/shared/watch \
   -I./watch-library/shared/driver \
   -I./watch-faces/clock \
@@ -114,6 +115,7 @@ SRCS += \
   ./lib/planetary/planetary.c \
   ./lib/sun_events/sun_events.c \
   ./lib/pet/pet.c \
+  ./lib/zone_offset/zone_offset.c \
   ./watch-library/shared/driver/thermistor_driver.c \
   ./watch-library/shared/watch/watch_common_buzzer.c \
   ./watch-library/shared/watch/watch_common_display.c \
