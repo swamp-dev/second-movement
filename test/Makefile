@@ -10,7 +10,7 @@ LDLIBS := -lm
 # as test_<name>_SRCS.
 TESTS := test_zodiac test_planetary test_sun_events test_pet test_filesystem
 test_zodiac_SRCS := test_zodiac.c ../lib/zodiac/zodiac.c ../lib/sunriset/sunriset.c
-test_planetary_SRCS := test_planetary.c ../lib/planetary/planetary.c ../lib/sunriset/sunriset.c
+test_planetary_SRCS := test_planetary.c ../lib/planetary/planetary.c ../lib/sun_events/sun_events.c ../lib/sunriset/sunriset.c
 test_sun_events_SRCS := test_sun_events.c ../lib/sun_events/sun_events.c ../lib/sunriset/sunriset.c
 test_pet_SRCS := test_pet.c ../lib/pet/pet.c
 # filesystem.c with real littlefs, over a RAM flash; stubs/ stands in for the

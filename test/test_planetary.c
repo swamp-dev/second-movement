@@ -68,6 +68,11 @@ static const place_t places[] = {
     {"Kiritimati", 1.87, -157.43, 14 * 3600},
 };
 
+// Field by field: planetary_hour_t has padding, which memcmp would compare too.
+static bool same_hour(const planetary_hour_t *a, const planetary_hour_t *b) {
+    return a->ruler == b->ruler && a->hour_number == b->hour_number && a->start == b->start && a->end == b->end;
+}
+
 static bool at(const place_t *p, int64_t t, planetary_hour_t *h) {
     return planetary_hour_at(t, p->offset, p->lat, p->lon, h);
 }
@@ -293,14 +298,14 @@ static void test_step_many_equals_repeated_single(void) {
     planetary_hour_t h, many, single;
     CHECK(at(&london, local_time(2026, 3, 20, 18, 0, 0), &h));
     CHECK(step(&london, &h, 0, &many));
-    CHECK(memcmp(&many, &h, sizeof h) == 0);
+    CHECK(same_hour(&many, &h));
 
     const int counts[] = {30, -30};
     for (int c = 0; c < 2; c++) {
         CHECK(step(&london, &h, counts[c], &many));
         single = h;
         for (int k = 0; k < 30; k++) CHECK(step(&london, &single, counts[c] > 0 ? 1 : -1, &single));
-        CHECK(memcmp(&many, &single, sizeof h) == 0);
+        CHECK(same_hour(&many, &single));
     }
 }
 
@@ -344,17 +349,17 @@ static void test_from_now_follows_the_current_hour(void) {
         CHECK(at(&new_york, t, &cur));
         CHECK(step(&new_york, &cur, k, &want));
         CHECK(from_now(&new_york, t, k, &got, &changes_at));
-        CHECK(memcmp(&got, &want, sizeof got) == 0);
+        CHECK(same_hour(&got, &want));
         CHECK_EQ_INT(changes_at, cur.end, "offset %d: changes when the current hour ends", k);
 
         // Unchanged until then: a second before the end gives the same answer.
         CHECK(from_now(&new_york, changes_at - 1, k, &later, &changes_at));
-        CHECK(memcmp(&later, &want, sizeof later) == 0);
+        CHECK(same_hour(&later, &want));
 
         // At the end it moves on by exactly one hour, to the same offset from the new current hour.
         CHECK(from_now(&new_york, cur.end, k, &later, &changes_at));
         CHECK(step(&new_york, &want, 1, &want));
-        CHECK(memcmp(&later, &want, sizeof later) == 0);
+        CHECK(same_hour(&later, &want));
     }
 }
 
