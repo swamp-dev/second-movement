@@ -10,24 +10,11 @@
 # flake's dev shell (flake.nix).
 set -euo pipefail
 
-# readlink -f: run through a symlink, the repo is still found from the real file.
+# readlink -f: find the repo from the real file, even when run through a symlink.
 self="$(readlink -f "$0")"
 cd "$(dirname "$self")/.."
 
-if ! command -v arm-none-eabi-gcc >/dev/null || ! command -v emmake >/dev/null; then
-  if [[ -n "${CI_LOCAL_IN_NIX:-}" ]]; then
-    echo "error: toolchain still missing inside nix develop" >&2
-    exit 1
-  fi
-  export CI_LOCAL_IN_NIX=1
-  exec nix --extra-experimental-features 'nix-command flakes' develop -c "$self" "$@"
-fi
-
-if [[ -n "$(git submodule status --recursive | { grep '^-' || true; })" ]]; then
-  echo "error: submodules not initialized; run: git submodule update --init --recursive" >&2
-  exit 1
-fi
-
+# Arguments are checked before the nix re-exec, so a typo fails at once.
 boards=(sensorwatch_red sensorwatch_green sensorwatch_blue sensorwatch_pro)
 displays=(classic custom)
 if [[ $# -gt 2 ]]; then
@@ -45,7 +32,21 @@ check() {
 if [[ $# -ge 1 ]]; then check "$1" "${boards[@]}"; boards=("$1"); fi
 if [[ $# -ge 2 ]]; then check "$2" "${displays[@]}"; displays=("$2"); fi
 
-# Logs are kept only when something failed; the failing step prints its log path.
+if ! command -v arm-none-eabi-gcc >/dev/null || ! command -v emmake >/dev/null; then
+  if [[ -n "${CI_LOCAL_IN_NIX:-}" ]]; then
+    echo "error: toolchain still missing inside nix develop" >&2
+    exit 1
+  fi
+  export CI_LOCAL_IN_NIX=1
+  exec nix --extra-experimental-features 'nix-command flakes' develop -c "$self" "$@"
+fi
+
+if [[ -n "$(git submodule status --recursive | { grep '^-' || true; })" ]]; then
+  echo "error: submodules not initialized; run: git submodule update --init --recursive" >&2
+  exit 1
+fi
+
+# Logs are deleted on success; on any failure the EXIT trap keeps them and prints where.
 logs="$(mktemp -d "${TMPDIR:-/tmp}/ci-local.XXXXXX")"
 trap 'status=$?; if [[ $status -eq 0 ]]; then rm -rf "$logs"; else echo "logs kept in $logs" >&2; fi' EXIT
 ncpu="$(nproc)"
