@@ -10,7 +10,8 @@
 # flake's dev shell (flake.nix).
 set -euo pipefail
 
-self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+# readlink -f: run through a symlink, the repo is still found from the real file.
+self="$(readlink -f "$0")"
 cd "$(dirname "$self")/.."
 
 if ! command -v arm-none-eabi-gcc >/dev/null || ! command -v emmake >/dev/null; then
@@ -33,11 +34,21 @@ if [[ $# -gt 2 ]]; then
   echo "usage: $0 [BOARD [DISPLAY]]" >&2
   exit 2
 fi
-if [[ $# -ge 1 ]]; then boards=("$1"); fi
-if [[ $# -ge 2 ]]; then displays=("$2"); fi
+# check <value> <allowed...>: exit unless <value> is one of <allowed>.
+check() {
+  local value="$1" a
+  shift
+  for a in "$@"; do [[ "$value" == "$a" ]] && return 0; done
+  echo "error: '$value' is not one of: $*" >&2
+  exit 2
+}
+if [[ $# -ge 1 ]]; then check "$1" "${boards[@]}"; boards=("$1"); fi
+if [[ $# -ge 2 ]]; then check "$2" "${displays[@]}"; displays=("$2"); fi
 
+# Logs are kept only when something failed; the failing step prints its log path.
 logs="$(mktemp -d "${TMPDIR:-/tmp}/ci-local.XXXXXX")"
-jobs="$(nproc)"
+trap 'status=$?; if [[ $status -eq 0 ]]; then rm -rf "$logs"; else echo "logs kept in $logs" >&2; fi' EXIT
+ncpu="$(nproc)"
 
 need() { # need <file...>: fail loudly if a build artifact is missing
   local f
@@ -67,7 +78,7 @@ for board in "${boards[@]}"; do
     rm -rf build build-sim
     # BOARD/DISPLAY go on the command line: an X11 DISPLAY in the
     # environment must never leak into make.
-    run "firmware-$board-$display" make -j"$jobs" BOARD="$board" DISPLAY="$display"
+    run "firmware-$board-$display" make -j"$ncpu" BOARD="$board" DISPLAY="$display"
     need build/firmware.uf2
     # Serial, like hosted CI: a parallel emscripten build intermittently
     # failed to link (`undefined symbol: free`).
