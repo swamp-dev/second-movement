@@ -19,8 +19,9 @@ Build, toolchain and face-registration details are in
 | 3 | Run the per-PR checklist below (`/finish-ticket` doesn't cover checklist items 1–2), then open the PR | `/finish-ticket` |
 | 4 | Wait for hosted CI to go green: the `host-tests` job and every `build` and `build-simulator` job of the `Build` workflow, for both the push run and the pull_request run | `gh pr checks <P>` |
 | 5 | Merge and clean up, or hand the PR to the user (see [Merge authority](#merge-authority)) | `/ship-ticket <P>` |
+| 6 | If the ticket is labelled `upstream`, send the fix upstream once the PR is merged (see [Upstream PRs](#upstream-prs)) | manual |
 
-Do the steps in order and don't skip any. `/full-send` loops steps 1–5
+Do the steps in order and don't skip any. `/full-send` loops steps 1–6
 over the open backlog and pauses after each ticket.
 
 ---
@@ -165,6 +166,127 @@ user decides.
   untested), the Per-PR checklist section, and Manual follow-ups.
 - **`KnightConfig`** is the owner's personal build branch. Agents never
   push to it, rebase it, or open PRs against it.
+- **Upstream branches** (`up/<N>-<slug>`, off `upstream/main`) are the one
+  exception to "branch from `origin/main`". See
+  [Upstream PRs](#upstream-prs).
+
+---
+
+## Upstream PRs
+
+The `upstream` label marks a bug in code this fork shares with
+`joeycastillo/second-movement`. These bugs are filed here only. The fix
+lands here first, through steps 1–5, and then goes upstream as a pull
+request. Tickets without the label skip this section.
+
+**When:** after the fix is merged to `main` here, never before. One
+upstream PR per ticket, and never a batch.
+
+### 1. Check that upstream still needs it
+
+```bash
+git fetch upstream
+git diff upstream/main main -- <files the fix touched>
+gh pr list -R joeycastillo/second-movement --state all --search "<face or function name>"
+```
+
+If `upstream/main` already has a fix, or an open upstream PR makes the same
+change, don't open another. Say so in a comment on the ticket, remove the
+`upstream` label, and stop.
+
+### 2. Make the branch
+
+```bash
+git worktree add ../sm-up-<N>-<slug> -b up/<N>-<slug> refs/remotes/upstream/main
+cd ../sm-up-<N>-<slug>
+git submodule update --init --recursive
+git cherry-pick -n <SHA of the squash-merge commit on main>
+```
+
+Then cut the change down to what upstream can take:
+
+- **Keep** the fix itself. If the fix moved logic into a new `lib/<dir>`,
+  keep those files and their lines in the root `Makefile`.
+- **Drop** everything upstream doesn't have: `test/`, `scripts/`, `docs/`,
+  `CLAUDE.md`, `.claude/`, `.github/`, `movement_config.h`, and any
+  fork-only face or library (`pet`, `planetary`, `zodiac`, `sun_events`,
+  `location/`).
+- **Port by hand** where the fork's file has diverged
+  (`git diff upstream/main main -- <file>` shows unrelated differences, as
+  for `sunrise_sunset_face.c` and `filesystem/filesystem.c`). Apply the same
+  fix to upstream's version of the code.
+
+If the fix only makes sense on top of fork-only code, it can't go upstream.
+Say why in a comment on the ticket, remove the `upstream` label, and stop.
+
+Commit it as one commit whose message describes the bug and the fix.
+Don't write `#<N>` in the message or the PR: on upstream that number points
+at a different issue. Refer to the ticket as
+`swamp-dev/second-movement#<N>`.
+
+### 3. Check it
+
+Upstream has no host tests and no `scripts/ci-local.sh`, so build the full
+matrix by hand on the upstream branch:
+
+```bash
+nix=(nix --extra-experimental-features 'nix-command flakes' develop -c)   # drop if the toolchain is on PATH
+for board in sensorwatch_red sensorwatch_green sensorwatch_blue sensorwatch_pro; do
+  for display in classic custom; do
+    rm -rf build build-sim
+    "${nix[@]}" make BOARD=$board DISPLAY=$display || break 2
+    "${nix[@]}" emmake make BOARD=$board DISPLAY=$display || break 2
+  done
+done
+```
+
+All 16 builds must pass. If step 2 needed a hand port, redo the simulator
+check on this branch for the affected face, since the code is no longer
+what was checked here.
+
+### 4. Open the PR
+
+```bash
+git push -u origin up/<N>-<slug>
+gh pr create -R joeycastillo/second-movement --base main \
+  --head swamp-dev:up/<N>-<slug> --title "<summary>" --body-file <file>
+```
+
+The body is the bug report, written for a maintainer who has never seen
+this fork:
+
+- what goes wrong and how to trigger it (steps, observed, expected);
+- the root cause, in two or three sentences;
+- what the change does;
+- how it was tested: the 16 builds, the simulator steps, and the host test
+  in this fork with a link to the merged PR here;
+- a line saying the change was prepared with Claude Code.
+
+### 5. Record it
+
+Comment on the ticket here with the upstream PR's URL, and swap the label:
+
+```bash
+gh issue edit <N> --remove-label upstream --add-label upstream-sent
+```
+
+(`gh label create upstream-sent` if it doesn't exist yet.) Closed tickets
+still labelled `upstream` are the queue of fixes waiting to go upstream:
+`gh issue list --state closed --label upstream`.
+
+### What the agent may do upstream
+
+Opening the upstream PR in step 4 is authorised by this section, under
+these limits:
+
+- only for a ticket labelled `upstream` whose fix is already merged here;
+- one upstream PR per ticket, opened one at a time;
+- nothing else on the upstream repo without the user asking: no issues, no
+  comments or replies to review, no further pushes to the `up/` branch
+  after the PR is open, and no closing or merging.
+
+When the upstream maintainers respond, tell the user and wait. The `up/`
+branch and its worktree stay until the upstream PR is merged or closed.
 
 ---
 
