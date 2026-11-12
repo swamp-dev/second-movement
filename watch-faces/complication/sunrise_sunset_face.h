@@ -54,7 +54,7 @@ void sunrise_sunset_face_resign(void *context);
 
 typedef struct {
     uint8_t rise_index;
-    watch_date_time_t rise_set_expires;
+    uint32_t refresh_at;  // Unix time the shown event next changes
     uint8_t longLatToUse;
     location_state_t location_state;
 } sunrise_sunset_face_state_t;
