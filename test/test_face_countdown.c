@@ -20,6 +20,8 @@ static void test_countdown(watch_lcd_type_t lcd) {
     CHECK(fake_lcd_shows(WATCH_POSITION_BOTTOM, " 00300"));  // the default 3 minutes
 
     harness_press(BUTTON_ALARM, PRESS_SHORT);  // start
+    // Uncomment when #119 is fixed (draw() clears SIGNAL straight away):
+    // CHECK(harness_indicator(WATCH_INDICATOR_SIGNAL));
     CHECK(harness_background_task(NULL));
     harness_tick(1);
     CHECK(fake_lcd_shows(WATCH_POSITION_BOTTOM, " 00259"));

@@ -291,9 +291,9 @@ static void test_dst_change_while_running(void) {
 
     // With 45 m left the face shows target - now with the hour taken off, a
     // negative number that prints as 7 characters ("0024100" in the bug
-    // report). On classic, watch_display_text writes the 7th past the end of
-    // Classic_LCD_Display_Mapping, which UBSan stops on. Uncomment when #86 is
-    // fixed:
+    // report). On classic, watch_display_text reads past the end of
+    // Classic_LCD_Display_Mapping for the 7th (#60), which UBSan stops on.
+    // Uncomment when #86 is fixed:
     // harness_tick(30 * 60);
     // CHECK(shows_time_left());
 }
