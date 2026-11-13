@@ -206,7 +206,8 @@ case "$b" in ""|main|KnightConfig) fin=no ;; esac
 if [ "$fin" = yes ] && [ "$(git rev-parse --show-toplevel)" = "$main" ] \
    && [ -n "$w" ] && [ "$w" != "$main" ] && [ -n "$tip" ] && [ "$tip" = "$safe" ] \
    && [ -z "$dirty" ] && [ -z "$sub" ]; then
-  git worktree remove --force "$w" && git branch -D "$b" && echo "REMOVED $w $b"
+  git worktree remove --force "$w" && git branch -D "$b" && echo "REMOVED $w $b" \
+    || echo "LEFT: a removal command failed"
 else
   echo "LEFT: fin=$fin branch=$b worktree=$w tip=$tip safe=$safe"
   printf '%s\n' "$dirty" "$sub"
@@ -223,7 +224,8 @@ submodule entries from the config every worktree shares.
 
 This doesn't cover anything else: a worktree or branch this session didn't
 create, `KnightConfig` and its worktree, a worktree whose PR is still open,
-or a remote branch (`/ship-ticket` already deletes the merged PR's own).
+an `up/` worktree, or a remote branch (`/ship-ticket` already deletes the
+merged PR's own).
 
 ---
 
@@ -414,23 +416,10 @@ these limits:
 
 When the upstream maintainers respond, or upstream's CI fails on the PR,
 tell the user and wait. The `up/` branch and its worktree stay until the
-upstream PR is merged or closed. If that happens in the session that
-created the worktree, remove both with the block in
-[Cleanup after a merge](#cleanup-after-a-merge), using these setter lines
-(in one Bash call with the block, from the main checkout). Here the branch
-must be at the tip `origin` has, so nothing is lost; if `origin` no longer
-has it, `safe` is empty and the block prints `LEFT`. In any other session,
-list the worktree and branch as leftovers for the user to remove.
-
-```bash
-b=up/<N>-<slug>
-u=$(gh pr view <upstream PR URL> -R joeycastillo/second-movement \
-  --json state,headRefName,headRepositoryOwner -q '"\(.state) \(.headRefName) \(.headRepositoryOwner.login)"')
-case "$u" in "MERGED $b swamp-dev"|"CLOSED $b swamp-dev") fin=yes ;; *) fin=no ;; esac
-safe=$(git ls-remote --heads origin "refs/heads/$b" | cut -f1)
-```
-
-The `up/` branch on `origin` stays; deleting it is the user's call.
+upstream PR is merged or closed; then list them as leftovers for the user
+to remove (`git worktree remove --force`, since the worktree has
+submodules). [Cleanup after a merge](#cleanup-after-a-merge) doesn't cover
+them: its go-ahead is for a PR merged in this repo.
 
 ---
 
