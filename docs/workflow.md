@@ -137,7 +137,7 @@ These PRs always go to the user to merge, even when every condition holds:
 For these, stop `/ship-ticket` before step 5 (merge). Print the PR URL and
 its CI status, and leave the claim, worktree and branch in place. After the
 user merges, post the closeout comment (`/ship-ticket` step 6 format) and
-clean up (step 7).
+clean up ([Cleanup after a merge](#cleanup-after-a-merge)).
 
 **Admin merge** (bypassing hosted CI) is never the agent's call. It's
 governed by `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`, and the
@@ -169,6 +169,63 @@ user decides.
 - **Upstream branches** (`up/<N>-<slug>`, off `upstream/main`) are the one
   exception to "branch from `origin/main`". See
   [Upstream PRs](#upstream-prs).
+
+### Cleanup after a merge
+
+Every worktree here has submodules, so `git worktree remove` always
+refuses, and after a squash merge `git branch -d` usually does too.
+`/ship-ticket` step 7 forbids `--force` and leaves `-D` to the user. **This
+repo relaxes that** for these two commands: the owner has given a standing
+go-ahead (`~/.dotfiles/.claude/rules/collaboration.md` § Standing grant:
+post-merge cleanup), and this section is how to use it here. In step 7, run
+the block below from the main checkout in place of `git worktree remove`,
+`git branch -d` and the patch-id check, and don't hand the commands back to
+the user. The block is stricter than the patch-id check: the local branch
+must be exactly the PR's merged head.
+
+Run it only for a worktree this session created, and only for the PR this
+`/ship-ticket` run merged or one the user said in this conversation they
+merged; `<P>` is that PR's number. Put these setter lines and the block in
+one Bash call:
+
+```bash
+pr() { gh pr view <P> -R swamp-dev/second-movement --json "$1" -q ".$1"; }
+[ "$(pr state)" = MERGED ] && [ "$(pr baseRefName)" = main ] && fin=yes || fin=no
+b=$(pr headRefName); safe=$(pr headRefOid)
+```
+
+```bash
+main=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
+w=$(git worktree list --porcelain | awk -v r="branch refs/heads/$b" '/^worktree /{p=substr($0,10)} $0==r{print p}')
+tip=$(git rev-parse --verify -q "refs/heads/$b")
+dirty=$(git -C "${w:-/dev/null}" status --short --ignored --ignore-submodules=none 2>&1 \
+  | grep -vE '^!! (build|build-sim|test/build|\.emscripten_cache|\.direnv)/$')
+sub=$(git -C "${w:-/dev/null}" submodule foreach --quiet --recursive \
+  'git stash list; git log --oneline --all --not --remotes' 2>&1)
+case "$b" in ""|main|KnightConfig) fin=no ;; esac
+if [ "$fin" = yes ] && [ "$(git rev-parse --show-toplevel)" = "$main" ] \
+   && [ -n "$w" ] && [ "$w" != "$main" ] && [ -n "$tip" ] && [ "$tip" = "$safe" ] \
+   && [ -z "$dirty" ] && [ -z "$sub" ]; then
+  git worktree remove --force "$w" && git branch -D "$b" && echo "REMOVED $w $b" \
+    || echo "LEFT: a removal command failed"
+else
+  echo "LEFT: fin=$fin branch=$b worktree=$w tip=$tip safe=$safe"
+  printf '%s\n' "$dirty" "$sub"
+fi
+```
+
+It prints `REMOVED` or `LEFT`. On `LEFT`, leave both and tell the user what
+it printed; don't work around it. `--force` deletes everything in the
+worktree, including ignored files and the submodules' own git directories,
+so the block refuses if anything but build output is ignored there, or if
+a submodule holds a stash or a commit that isn't on one of its remotes.
+Never run `git submodule deinit` to get around git's refusal: it strips the
+submodule entries from the config every worktree shares.
+
+This doesn't cover anything else: a worktree or branch this session didn't
+create, `KnightConfig` and its worktree, a worktree whose PR is still open,
+an `up/` worktree, or a remote branch (`/ship-ticket` already deletes the
+merged PR's own).
 
 ---
 
@@ -361,7 +418,8 @@ When the upstream maintainers respond, or upstream's CI fails on the PR,
 tell the user and wait. The `up/` branch and its worktree stay until the
 upstream PR is merged or closed; then list them as leftovers for the user
 to remove (`git worktree remove --force`, since the worktree has
-submodules).
+submodules). [Cleanup after a merge](#cleanup-after-a-merge) doesn't cover
+them: its go-ahead is for a PR merged in this repo.
 
 ---
 
