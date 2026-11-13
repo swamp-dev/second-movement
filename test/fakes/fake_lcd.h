@@ -49,7 +49,10 @@ const char *fake_lcd_text(watch_position_t location, char *buf, size_t size);
 // clear is in that state now. Pass the string for the current LCD: a face's
 // long text on custom, its fallback on classic. Prefer this to comparing
 // fake_lcd_text, because glyphs the LCD can't tell apart (S and 5) still
-// match. Returns false, with a message on stderr, for text the display code
+// match. Positions the text doesn't reach are compared as blanks, so on custom
+// "AC" in TOP_LEFT also needs the third character blank: pass the full width
+// when a face writes fewer characters than the location holds.
+// Returns false, with a message on stderr, for text the display code
 // can't draw there: empty, longer than the location (the custom bottom takes
 // 7 when the first is '1'), or a character outside 0x20-0x7e.
 bool fake_lcd_shows(watch_position_t location, const char *text);

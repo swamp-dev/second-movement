@@ -244,20 +244,27 @@ bool fake_lcd_shows(watch_position_t location, const char *text) {
     const uint8_t *positions;
     size_t width = location_positions(location, &positions);
     size_t len = strlen(text);
-    // On custom, a 7-character bottom string starting with 1 uses the leading half-digit.
+    // On custom, a 7-character bottom string starting with 1 uses the leading
+    // half-digit: the rule in watch_display_text_with_fallback, kept in step.
     size_t max = width;
     if (location == WATCH_POSITION_BOTTOM && lcd_type == WATCH_LCD_TYPE_CUSTOM && len == width + 1 && text[0] == '1')
         max = width + 1;
     // Refuse what the display code can't draw rather than replay it: an empty
     // string or a character outside the font indexes before or past the
     // character set, and a too-long string past the position table (#60).
-    bool drawable = len > 0 && len <= max;
-    for (size_t i = 0; i < len && drawable; i++)
-        if (text[i] < FIRST_CHAR || text[i] > LAST_CHAR) drawable = false;
-    if (!drawable) {
-        fprintf(stderr, "fake_lcd_shows: \"%s\" can't be drawn in location %d (%zu characters) on the %s LCD\n",
-                text, location, max, lcd_type == WATCH_LCD_TYPE_CUSTOM ? "custom" : "classic");
+    static const char *names[] = {"FULL", "TOP", "TOP_LEFT", "TOP_RIGHT", "BOTTOM", "HOURS", "MINUTES", "SECONDS"};
+    const char *name = (size_t)location < sizeof(names) / sizeof(names[0]) ? names[location] : "?";
+    if (len == 0 || len > max) {
+        fprintf(stderr, "fake_lcd_shows: refused %zu characters for %s, which holds %zu on the %s LCD\n", len, name, max,
+                lcd_type == WATCH_LCD_TYPE_CUSTOM ? "custom" : "classic");
         return false;
+    }
+    for (size_t i = 0; i < len; i++) {
+        if (text[i] < FIRST_CHAR || text[i] > LAST_CHAR) {
+            fprintf(stderr, "fake_lcd_shows: refused character 0x%02x for %s, outside the font\n",
+                    (unsigned char)text[i], name);
+            return false;
+        }
     }
     // Pad to the full width, so "1" in HOURS means "1 ", not "1 and anything".
     char padded[MAX_POSITIONS + 2];
