@@ -170,6 +170,38 @@ user decides.
   exception to "branch from `origin/main`". See
   [Upstream PRs](#upstream-prs).
 
+### Cleanup after a merge
+
+Every worktree here has submodules, so `git worktree remove` always refuses
+("working trees containing submodules cannot be moved or removed"), and
+after a squash merge `git branch -d` refuses too. `/ship-ticket` step 7
+forbids `--force` and leaves `-D` to the user. **This repo relaxes that:**
+the owner has given a standing go-ahead, so the agent runs both itself and
+doesn't hand the commands back.
+
+```bash
+git worktree remove --force ../sm-<N>-<slug>
+git branch -D <type>/<N>-<slug>
+```
+
+Run them from the main checkout, only for the worktree and local branch of
+the PR this `/ship-ticket` run merged (or the user merged in this session),
+and only after all of these checks, in this order:
+
+1. `gh pr view <P> --json state -q .state` prints `MERGED`.
+2. `git -C ../sm-<N>-<slug> status --short` prints nothing.
+3. The patch-id check in `/ship-ticket` step 7 prints `SAME`, and its
+   `git log` prints nothing.
+
+If a check fails, leave the worktree and the branch, and tell the user what
+it printed. Never run `git submodule deinit` to get around the refusal: it
+strips the submodule entries from the config every worktree shares.
+
+This doesn't cover anything else: another session's worktree or branch,
+`KnightConfig` and its worktree, a remote branch other than the merged PR's
+own (which `/ship-ticket` step 7 already deletes), or a worktree whose PR is
+still open.
+
 ---
 
 ## Upstream PRs
@@ -359,9 +391,18 @@ these limits:
 
 When the upstream maintainers respond, or upstream's CI fails on the PR,
 tell the user and wait. The `up/` branch and its worktree stay until the
-upstream PR is merged or closed; then list them as leftovers for the user
-to remove (`git worktree remove --force`, since the worktree has
-submodules).
+upstream PR is merged or closed. A later session that finds it so removes
+them, after checking that the worktree is clean and that `origin` still has
+the branch at the local tip, so nothing is lost:
+
+```bash
+gh pr view <upstream PR> -R joeycastillo/second-movement --json state -q .state   # MERGED or CLOSED
+git -C ../sm-up-<N>-<slug> status --short                                          # prints nothing
+[ "$(git rev-parse up/<N>-<slug>)" = "$(git ls-remote --heads origin refs/heads/up/<N>-<slug> | cut -f1)" ] \
+  && git worktree remove --force ../sm-up-<N>-<slug> && git branch -D up/<N>-<slug>
+```
+
+The `up/` branch on `origin` stays; deleting it is the user's call.
 
 ---
 

@@ -140,8 +140,8 @@ adding the command:
 ## 6. Status and stop
 
 Report the ticket, the PR here, the upstream issue and PR, and the leftovers
-for the user to remove (the `up/` worktree and branch stay until the
-upstream PR is merged or closed). Then stop.
+(the `up/` worktree and branch stay until the upstream PR is merged or
+closed; § Upstream PRs says who removes them then). Then stop.
 
 ## Limits
 
