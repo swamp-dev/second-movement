@@ -8,7 +8,7 @@ LDLIBS := -lm
 
 # One program per test file: add test_<name> to TESTS and list its sources
 # as test_<name>_SRCS.
-TESTS := test_zodiac test_planetary test_sun_events test_pet test_filesystem test_zone_offset
+TESTS := test_zodiac test_planetary test_sun_events test_pet test_filesystem test_zone_offset test_display
 test_zodiac_SRCS := test_zodiac.c ../lib/zodiac/zodiac.c ../lib/sunriset/sunriset.c
 test_planetary_SRCS := test_planetary.c ../lib/planetary/planetary.c ../lib/sun_events/sun_events.c ../lib/sunriset/sunriset.c
 test_sun_events_SRCS := test_sun_events.c ../lib/sun_events/sun_events.c ../lib/sunriset/sunriset.c
@@ -19,6 +19,10 @@ test_zone_offset_SRCS := test_zone_offset.c ../lib/zone_offset/zone_offset.c ../
 # watch and movement headers it includes.
 test_filesystem_SRCS := test_filesystem.c ../filesystem/filesystem.c ../littlefs/lfs.c ../littlefs/lfs_util.c ../lib/base64/base64.c
 build/test_filesystem: CPPFLAGS += -Istubs -I../filesystem -I../littlefs -I../lib/base64
+# The shared display code over the fake LCD in fakes/. watch_slcd.h includes the
+# real watch.h, which needs a board pins.h (stubs/board) and gossamer's eic.h.
+test_display_SRCS := test_display.c fakes/fake_lcd.c ../watch-library/shared/watch/watch_common_display.c
+build/test_display: CPPFLAGS += -Ifakes -Istubs/board -I../watch-library/shared/watch -I../gossamer/common
 
 .PHONY: test clean
 test: $(addprefix build/,$(TESTS))
@@ -27,7 +31,8 @@ test: $(addprefix build/,$(TESTS))
 .SECONDEXPANSION:
 # Any header in test/ or lib/ triggers a rebuild, so a header-only change is never
 # tested against a stale binary.
-HEADERS := $(wildcard *.h stubs/*.h ../lib/*/*.h ../filesystem/*.h ../littlefs/*.h ../utz/*.h)
+HEADERS := $(wildcard *.h stubs/*.h stubs/board/*.h fakes/*.h ../lib/*/*.h ../filesystem/*.h ../littlefs/*.h ../utz/*.h \
+    ../watch-library/shared/watch/*.h)
 
 build/%: $$($$*_SRCS) $(HEADERS)
 	@mkdir -p build
