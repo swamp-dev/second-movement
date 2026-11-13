@@ -1,5 +1,7 @@
 #include "fake_lcd.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "watch_common_display.h"
@@ -14,11 +16,10 @@
 
 typedef bool pixels_t[COMS][SEGS];
 
-// Defined in watch_common_display.c; the watch calls the update from
-// watch_discover_lcd_type once the custom LCD is detected.
+// Defined in watch_common_display.c with no header declaration; the watch
+// calls _watch_update_indicator_segments from watch_discover_lcd_type once the
+// custom LCD is detected.
 extern uint8_t IndicatorSegments[8];
-void _watch_update_indicator_segments(void);
-void watch_display_character(uint8_t character, uint8_t position);
 
 static watch_lcd_type_t lcd_type = WATCH_LCD_TYPE_CLASSIC;
 static pixels_t screen;
@@ -30,12 +31,23 @@ static bool (*touched)[SEGS];
 static uint8_t classic_indicators[8];
 static bool classic_indicators_saved;
 
+// An address outside the SLCD would write past the buffer; a SEG past 63 would
+// land silently in the next row, which ASan can't see. Stop the test instead.
+static void check_address(uint8_t com, uint8_t seg) {
+    if (com >= COMS || seg >= SEGS) {
+        fprintf(stderr, "fake_lcd: pixel (%d,%d) is outside the display\n", com, seg);
+        abort();
+    }
+}
+
 void watch_set_pixel(uint8_t com, uint8_t seg) {
+    check_address(com, seg);
     active[com][seg] = true;
     if (touched) touched[com][seg] = true;
 }
 
 void watch_clear_pixel(uint8_t com, uint8_t seg) {
+    check_address(com, seg);
     active[com][seg] = false;
     if (touched) touched[com][seg] = true;
 }
@@ -188,47 +200,77 @@ char fake_lcd_char(uint8_t position) {
     return '?';
 }
 
-const char *fake_lcd_text(watch_position_t location, char *buf, size_t size) {
+// The positions a location fills, in the order watch_display_text and
+// watch_display_text_with_fallback fill them. Returns how many.
+static size_t location_positions(watch_position_t location, const uint8_t **positions) {
     static const uint8_t classic_top[] = {0, 1}, custom_top[] = {0, 1, 10, 2, 3};
     static const uint8_t custom_top_left[] = {0, 1, 10}, top_right[] = {2, 3};
     static const uint8_t bottom[] = {4, 5, 6, 7, 8, 9}, hours[] = {4, 5};
     static const uint8_t minutes[] = {6, 7}, seconds[] = {8, 9};
     static const uint8_t full[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
     bool custom = lcd_type == WATCH_LCD_TYPE_CUSTOM;
-    const uint8_t *positions = full;
-    size_t count = 0, n = 0;
 
     switch (location) {
         case WATCH_POSITION_TOP:
-            positions = custom ? custom_top : classic_top;
-            count = custom ? 5 : 2;
-            break;
+            *positions = custom ? custom_top : classic_top;
+            return custom ? 5 : 2;
         case WATCH_POSITION_TOP_LEFT:
-            positions = custom ? custom_top_left : classic_top;
-            count = custom ? 3 : 2;
-            break;
-        case WATCH_POSITION_TOP_RIGHT: positions = top_right; count = 2; break;
-        case WATCH_POSITION_BOTTOM: positions = bottom; count = 6; break;
-        case WATCH_POSITION_HOURS: positions = hours; count = 2; break;
-        case WATCH_POSITION_MINUTES: positions = minutes; count = 2; break;
-        case WATCH_POSITION_SECONDS: positions = seconds; count = 2; break;
-        case WATCH_POSITION_FULL: positions = full; count = custom ? 11 : 10; break;
+            *positions = custom ? custom_top_left : classic_top;
+            return custom ? 3 : 2;
+        case WATCH_POSITION_TOP_RIGHT: *positions = top_right; return 2;
+        case WATCH_POSITION_BOTTOM: *positions = bottom; return 6;
+        case WATCH_POSITION_HOURS: *positions = hours; return 2;
+        case WATCH_POSITION_MINUTES: *positions = minutes; return 2;
+        case WATCH_POSITION_SECONDS: *positions = seconds; return 2;
+        case WATCH_POSITION_FULL: *positions = full; return custom ? 11 : 10;
     }
+    *positions = full;
+    return 0;
+}
+
+const char *fake_lcd_text(watch_position_t location, char *buf, size_t size) {
+    const uint8_t *positions;
+    size_t count = location_positions(location, &positions), n = 0;
     if (size == 0) return buf;
     // The custom LCD's bottom line has a leading half-digit that can only show "1".
-    if (location == WATCH_POSITION_BOTTOM && custom && screen[0][22] && n + 1 < size) buf[n++] = '1';
+    if (location == WATCH_POSITION_BOTTOM && lcd_type == WATCH_LCD_TYPE_CUSTOM && screen[0][22] && n + 1 < size)
+        buf[n++] = '1';
     for (size_t i = 0; i < count && n + 1 < size; i++) buf[n++] = fake_lcd_char(positions[i]);
     buf[n] = 0;
     return buf;
 }
 
 bool fake_lcd_shows(watch_position_t location, const char *text) {
+    const uint8_t *positions;
+    size_t width = location_positions(location, &positions);
+    size_t len = strlen(text);
+    // On custom, a 7-character bottom string starting with 1 uses the leading half-digit.
+    size_t max = width;
+    if (location == WATCH_POSITION_BOTTOM && lcd_type == WATCH_LCD_TYPE_CUSTOM && len == width + 1 && text[0] == '1')
+        max = width + 1;
+    // Refuse what the display code can't draw rather than replay it: an empty
+    // string or a character outside the font indexes before or past the
+    // character set, and a too-long string past the position table (#60).
+    bool drawable = len > 0 && len <= max;
+    for (size_t i = 0; i < len && drawable; i++)
+        if (text[i] < FIRST_CHAR || text[i] > LAST_CHAR) drawable = false;
+    if (!drawable) {
+        fprintf(stderr, "fake_lcd_shows: \"%s\" can't be drawn in location %d (%zu characters) on the %s LCD\n",
+                text, location, max, lcd_type == WATCH_LCD_TYPE_CUSTOM ? "custom" : "classic");
+        return false;
+    }
+    // Pad to the full width, so "1" in HOURS means "1 ", not "1 and anything".
+    char padded[MAX_POSITIONS + 2];
+    memset(padded, ' ', sizeof(padded));
+    memcpy(padded, text, len);
+    padded[len > width ? len : width] = 0;
+
     pixels_t out, mark;
     memset(out, 0, sizeof(out));
     memset(mark, 0, sizeof(mark));
     active = out;
     touched = mark;
-    watch_display_text_with_fallback(location, text, text);
+    watch_display_text_with_fallback(location, padded, padded);
     active = screen;
     touched = NULL;
     for (int com = 0; com < COMS; com++)

@@ -60,8 +60,10 @@ static void check_text(watch_position_t location, const char *expected, const ch
     }
 }
 
-// Every character the display can be asked to draw decodes to something, and
-// that something draws the same segments: the decoder never invents a glyph.
+// Every character the display can be asked to draw decodes to something that
+// draws the same mapped segments and reads back as itself. This checks the
+// decoder is consistent; check_round_trips and test_locations check it reads
+// the right character.
 static void test_decoder_is_consistent(void) {
     for (size_t t = 0; t < 2; t++) {
         fake_lcd_reset(lcd_types[t]);
@@ -118,10 +120,17 @@ static void test_digits_and_letters(void) {
     check_round_trips(0, "0123456789");
     for (uint8_t pos = 3; pos < 10; pos++) check_round_trips(pos, "0123456789");
     check_round_trips(2, "0123");
-    // Known classic limits (see CLAUDE.md): the second top character can't
-    // draw G, and bottom characters 0 and 2 (positions 4 and 6) can't draw
-    // b, d or Y.
-    check_not_drawable(1, "G");
+    // Known classic limits: the second top character (position 1) shares a
+    // pixel between two segments, so it can't draw G, 6, 8 or 9 (all three
+    // digits read back as 5), and bottom characters 0 and 2 (positions 4
+    // and 6) can't draw b, d or Y.
+    check_not_drawable(1, "G689");
+    check_round_trips(1, "0123457");
+    for (const char *c = "689"; *c; c++) {
+        fake_lcd_reset(WATCH_LCD_TYPE_CLASSIC);
+        watch_display_character((uint8_t)*c, 1);
+        CHECK_EQ_INT(fake_lcd_char(1), '5', "classic pos 1 '%c'", *c);
+    }
     check_not_drawable(4, "bdY");
     check_not_drawable(6, "bdY");
 }
@@ -185,11 +194,30 @@ static void test_shows(void) {
         CHECK(!fake_lcd_shows(WATCH_POSITION_BOTTOM, "SEt 13"));
         CHECK(fake_lcd_shows(WATCH_POSITION_SECONDS, "12"));
         CHECK(!fake_lcd_shows(WATCH_POSITION_HOURS, "12"));
+        // Shorter text is padded with spaces, so it can't match a prefix.
+        CHECK(!fake_lcd_shows(WATCH_POSITION_SECONDS, "1"));
+        CHECK(!fake_lcd_shows(WATCH_POSITION_BOTTOM, "SEt"));
+        watch_display_text(WATCH_POSITION_SECONDS, "1 ");
+        CHECK(fake_lcd_shows(WATCH_POSITION_SECONDS, "1"));
+        // Text the display code can't draw is refused, not replayed.
+        CHECK(!fake_lcd_shows(WATCH_POSITION_SECONDS, ""));
+        CHECK(!fake_lcd_shows(WATCH_POSITION_SECONDS, "123"));
+        CHECK(!fake_lcd_shows(WATCH_POSITION_SECONDS, "1\t"));
     }
     fake_lcd_reset(WATCH_LCD_TYPE_CUSTOM);
     watch_display_text_with_fallback(WATCH_POSITION_TOP, "SUNRS", "SR");
     CHECK(fake_lcd_shows(WATCH_POSITION_TOP, "SUNRS"));
     CHECK(!fake_lcd_shows(WATCH_POSITION_TOP, "SUNSE"));
+    watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, "1234567", "234567");
+    CHECK(fake_lcd_shows(WATCH_POSITION_BOTTOM, "1234567"));
+    CHECK(!fake_lcd_shows(WATCH_POSITION_BOTTOM, "234567"));
+
+    // On classic a 7-character bottom string would read past the position
+    // table (#60), so it's refused.
+    fake_lcd_reset(WATCH_LCD_TYPE_CLASSIC);
+    watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, "1234567", "234567");
+    CHECK(fake_lcd_shows(WATCH_POSITION_BOTTOM, "234567"));
+    CHECK(!fake_lcd_shows(WATCH_POSITION_BOTTOM, "1234567"));
 }
 
 static void test_indicators(void) {
@@ -239,15 +267,24 @@ static bool known_crosstalk(watch_lcd_type_t type, uint8_t pos, int c) {
     return false;
 }
 
-// Drawing a character never changes a segment that belongs to another
-// position, whether the screen started blank or fully lit.
+// A pixel a draw at this position may change: its own segments, plus the
+// extra segment classic position 0 uses for B, D and @.
+static bool may_change(watch_lcd_type_t type, uint8_t pos, uint8_t com, uint8_t seg) {
+    if (fake_lcd_in_mapping(pos, com, seg)) return true;
+    return type == WATCH_LCD_TYPE_CLASSIC && pos == 0 && com == 0 && seg == 15;
+}
+
+// Drawing a character changes no pixel outside its own position (another
+// character, an indicator, the colon, the decimal point, the leading 1),
+// whether the screen started blank or fully lit. Each case on the known list
+// must still cross-talk, so a fix of #116 fails here until the list shrinks.
 static void test_no_crosstalk(void) {
     for (size_t t = 0; t < 2; t++) {
         watch_lcd_type_t type = lcd_types[t];
         fake_lcd_reset(type);
         for (uint8_t pos = 0; pos < fake_lcd_num_positions(); pos++) {
             for (int c = FIRST_CHAR; c <= LAST_CHAR; c++) {
-                if (known_crosstalk(type, pos, c)) continue;
+                bool crossed = false;
                 for (int lit = 0; lit < 2; lit++) {
                     fake_lcd_reset(type);
                     if (lit)
@@ -256,26 +293,18 @@ static void test_no_crosstalk(void) {
                     bool before[8][64];
                     snapshot(before);
                     watch_display_character((uint8_t)c, pos);
-                    for (uint8_t other = 0; other < fake_lcd_num_positions(); other++) {
-                        if (other == pos) continue;
-                        for (uint8_t com = 0; com < 8; com++)
-                            for (uint8_t seg = 0; seg < 64; seg++)
-                                if (fake_lcd_in_mapping(other, com, seg) && !fake_lcd_in_mapping(pos, com, seg) &&
-                                    fake_lcd_pixel(com, seg) != before[com][seg]) {
-                                    check_count++;
-                                    check_failures++;
-                                    fprintf(stderr, "%s: '%c' at position %d changes (%d,%d) of position %d\n",
-                                            lcd_name(type), c, pos, com, seg, other);
-                                }
-                    }
+                    for (uint8_t com = 0; com < 8; com++)
+                        for (uint8_t seg = 0; seg < 64; seg++)
+                            if (!may_change(type, pos, com, seg) && fake_lcd_pixel(com, seg) != before[com][seg]) {
+                                crossed = true;
+                                if (!known_crosstalk(type, pos, c))
+                                    fprintf(stderr, "%s: '%c' at position %d changes pixel (%d,%d)\n", lcd_name(type), c,
+                                            pos, com, seg);
+                            }
                 }
+                CHECK_EQ_INT(crossed, known_crosstalk(type, pos, c), "%s '%c' at position %d cross-talk", lcd_name(type),
+                             c, pos);
             }
-        }
-        // Make sure the skip list above is still needed: it matches #116.
-        if (type == WATCH_LCD_TYPE_CUSTOM) {
-            fake_lcd_reset(type);
-            watch_display_character('B', 0);
-            CHECK(fake_lcd_in_mapping(5, 0, 15) && fake_lcd_pixel(0, 15));
         }
     }
 }

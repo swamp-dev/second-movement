@@ -32,17 +32,26 @@ bool fake_lcd_in_mapping(uint8_t position, uint8_t com, uint8_t seg);
 // it prefers digits over letters, a letter or digit the display code draws as
 // itself, then any letter or digit, then punctuation. So "SET" reads back
 // "5Et"; assert with fake_lcd_shows when that matters.
+// Classic position 1 (the second top character) shares a pixel between two
+// segments, so many glyphs collapse there: 6, 8 and 9 all read back as '5'.
 char fake_lcd_char(uint8_t position);
 
 // The text shown in a location, in the order watch_display_text and
 // watch_display_text_with_fallback fill it: TOP is 2 characters on classic
 // and 5 on custom, TOP_LEFT 2 or 3, BOTTOM 6 (7 on custom when the leading
-// "1" segment is lit), FULL 10 or 11. Writes into buf and returns it.
+// "1" segment is lit), FULL 10 or 11 (FULL never shows the leading "1").
+// Writes into buf, truncated to size - 1 characters; 13 bytes always fit.
 const char *fake_lcd_text(watch_position_t location, char *buf, size_t size);
 
-// True if every pixel that watch_display_text_with_fallback(location, text,
-// text) would set or clear is in that state now. The robust way to assert
-// what a face displays: it can't be fooled by characters the LCD can't draw.
+// True if the location shows exactly `text`, padded with spaces to the
+// location's width (so "1" in HOURS means "1 "): every pixel that
+// watch_display_text_with_fallback(location, padded, padded) would set or
+// clear is in that state now. Pass the string for the current LCD: a face's
+// long text on custom, its fallback on classic. Prefer this to comparing
+// fake_lcd_text, because glyphs the LCD can't tell apart (S and 5) still
+// match. Returns false, with a message on stderr, for text the display code
+// can't draw there: empty, longer than the location (the custom bottom takes
+// 7 when the first is '1'), or a character outside 0x20-0x7e.
 bool fake_lcd_shows(watch_position_t location, const char *text);
 
 bool fake_lcd_indicator(watch_indicator_t indicator);
