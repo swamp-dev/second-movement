@@ -43,4 +43,17 @@ int16_t zone_offset_at_standard(const uzone_packed_t *zone, udatetime_t standard
 /// udate_t holds.
 int16_t zone_offset_at_unix_time(const uzone_packed_t *zone, uint32_t unix_time);
 
+/// The offset that turns the wall-clock date-time `local` in `zone` into UTC.
+/// A time the clocks skip when they go forward gets the offset from before
+/// the change, so it lands an hour later on the wall clock (02:30 becomes
+/// 03:30). A time that happens twice when they go back is the second one.
+int16_t zone_offset_at_local(const uzone_packed_t *zone, udatetime_t local);
+
+/// The same, but a time that happens twice gets `preferred` (minutes east of
+/// UTC) when that is one of its two offsets. Pass the offset the clock is
+/// showing now, so that adjusting the time within the repeated hour stays in
+/// the same pass of it. Wherever `preferred` isn't in force at `local`, the
+/// result is zone_offset_at_local()'s.
+int16_t zone_offset_at_local_preferring(const uzone_packed_t *zone, udatetime_t local, int16_t preferred);
+
 #endif // ZONE_OFFSET_H_
