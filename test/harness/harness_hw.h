@@ -13,8 +13,9 @@ void hw_reset(watch_date_time_t utc);
 
 // Advances the RTC counter by one count (1/128 s) and fires what is due at
 // the new count, in this order: the periodic (tick) callback, compare
-// callbacks by index, the end of a buzzer sequence. Returns true if any of
-// them fired, that is, if the watch would have woken for an interrupt.
+// callbacks (one count after their match) by index, the end of a buzzer
+// sequence. Returns true if any of them fired, that is, if the watch would
+// have woken for an interrupt.
 bool hw_step(void);
 
 void hw_set_button(harness_button_t button, bool down);

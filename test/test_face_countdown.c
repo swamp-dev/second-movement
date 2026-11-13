@@ -32,6 +32,7 @@ static void test_countdown(watch_lcd_type_t lcd) {
     harness_tick(1);  // the alarm plays and the countdown resets
     CHECK_EQ_INT(harness_buzzer_count(), 1, "the alarm");
     CHECK_EQ_INT(harness_buzzer_log(0)->sequence[0], BUZZER_NOTE_C8, "movement's alarm tune");
+    CHECK_EQ_INT(harness_buzzer_log(0)->volume, WATCH_BUZZER_VOLUME_LOUD, "at the alarm volume");
     CHECK(fake_lcd_shows(WATCH_POSITION_BOTTOM, " 00300"));
     CHECK(!harness_indicator(WATCH_INDICATOR_SIGNAL));
     CHECK(!harness_background_task(NULL));

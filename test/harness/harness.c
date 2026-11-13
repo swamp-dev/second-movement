@@ -158,12 +158,18 @@ static udatetime_t _movement_convert_date_time_to_udate(watch_date_time_t date_t
     };
 }
 
-// movement.c:172-175, as it is: it hands out backup register numbers as
-// volumes.
+// movement.c:172-183
 static watch_buzzer_volume_t _movement_get_buzzer_volume(movement_buzzer_priority_t priority) {
-    (void)priority;
-    if (movement_state.next_available_backup_register >= 7) return 0;
-    return movement_state.next_available_backup_register++;
+    switch (priority) {
+        case BUZZER_PRIORITY_BUTTON:
+            return movement_button_volume();
+        case BUZZER_PRIORITY_SIGNAL:
+            return movement_signal_volume();
+        case BUZZER_PRIORITY_ALARM:
+            return movement_alarm_volume();
+        default:
+            return WATCH_BUZZER_VOLUME_LOUD;
+    }
 }
 
 // movement.c:185-218
@@ -394,14 +400,6 @@ void movement_illuminate_led(void) {
     }
 }
 
-// movement.c:460-467
-void movement_force_led_on(uint8_t red, uint8_t green, uint8_t blue) {
-    movement_state.light_on = true;
-    watch_set_led_color_rgb(red, green, blue);
-    watch_rtc_disable_comp_callback_no_schedule(LED_TIMEOUT);
-    movement_volatile_state.schedule_next_comp = true;
-}
-
 // movement.c:469-475
 void movement_force_led_off(void) {
     movement_state.light_on = false;
@@ -559,11 +557,6 @@ watch_date_time_t movement_get_utc_date_time(void) {
     return watch_rtc_get_date_time();
 }
 
-// movement.c:714-716
-uint32_t movement_get_utc_timestamp(void) {
-    return watch_rtc_get_unix_time();
-}
-
 // movement.c:734-744
 void movement_set_utc_timestamp(uint32_t timestamp) {
     watch_rtc_set_unix_time(timestamp);
@@ -578,6 +571,15 @@ bool movement_button_should_sound(void) {
 
 watch_buzzer_volume_t movement_button_volume(void) {
     return movement_state.settings.bit.button_volume;
+}
+
+// movement.c:763-772
+watch_buzzer_volume_t movement_signal_volume(void) {
+    return movement_state.signal_volume;
+}
+
+watch_buzzer_volume_t movement_alarm_volume(void) {
+    return movement_state.alarm_volume;
 }
 
 // movement.c:848-893: with no accelerometer, both report that tap detection
@@ -680,7 +682,10 @@ static void _switch_face(void) {
 }
 
 // movement.c:1266-1412, without the accelerometer and the USB shell.
-static void _app_loop(void) {
+// Returns true if the watch just woke from low-energy mode: app_loop then
+// returns can_sleep = false (movement.c:1386), so it runs again at once and
+// the face gets the EVENT_ACTIVATE that waking queued. _run_app_loop does that.
+static bool _app_loop(void) {
     const watch_face_t *wf = &watch_faces[movement_state.current_face_idx];
 
     uint32_t pending_events = movement_volatile_state.pending_events;
@@ -751,10 +756,27 @@ static void _app_loop(void) {
         movement_volatile_state.is_sleeping = true;
         _movement_disable_inactivity_countdown();
         // The first pass runs at once; later ones run from _step.
-        if (_sleep_mode_pass()) _wake_from_sleep_mode();
+        if (_sleep_mode_pass()) {
+            _wake_from_sleep_mode();
+            return true;
+        }
     }
 
     movement_volatile_state.schedule_next_comp = false;
+    return false;
+}
+
+static void _run_app_loop(void) {
+    while (_app_loop()) {
+    }
+}
+
+// A pass of the sleep loop; if it wakes the watch, the app_loop that follows.
+static void _run_sleep_mode_pass(void) {
+    if (_sleep_mode_pass()) {
+        _wake_from_sleep_mode();
+        _run_app_loop();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -876,16 +898,15 @@ static void cb_tick(void) {
 // ---------------------------------------------------------------------------
 // The driver.
 
-// One RTC count. The watch sleeps between interrupts, so app_loop (or, in
-// low-energy mode, a pass of the sleep loop) runs only when one fired.
+// One RTC count. The watch sleeps between interrupts, so app_loop runs only
+// when one fired. In low-energy mode any interrupt ends watch_enter_sleep_mode
+// and runs another pass of the sleep loop.
 static void _step(void) {
     if (!hw_step()) return;
     if (movement_volatile_state.is_sleeping) {
-        if (movement_volatile_state.minute_alarm_fired || movement_volatile_state.exit_sleep_mode) {
-            if (_sleep_mode_pass()) _wake_from_sleep_mode();
-        }
+        _run_sleep_mode_pass();
     } else {
-        _app_loop();
+        _run_app_loop();
     }
 }
 
@@ -944,7 +965,6 @@ void harness_init(watch_lcd_type_t lcd, watch_date_time_t utc, movement_settings
     _movement_update_dst_offset_cache();
     movement_state.signal_volume = MOVEMENT_DEFAULT_SIGNAL_VOLUME;
     movement_state.alarm_volume = MOVEMENT_DEFAULT_ALARM_VOLUME;
-    movement_state.next_available_backup_register = 2;
     _movement_reset_inactivity_countdown();
     _movement_set_top_of_minute_alarm();
 }
@@ -953,7 +973,7 @@ void harness_load_face(const watch_face_t *face) {
     watch_faces[HARNESS_FACE_INDEX] = *face;
     movement_state.current_face_idx = HARNESS_FACE_INDEX;
     _app_setup();
-    _app_loop();
+    _run_app_loop();
 }
 
 void *harness_context(void) {
@@ -972,7 +992,7 @@ void harness_button_down(harness_button_t button) {
         // consumed: the button interrupts aren't registered while asleep.
         if (button == BUTTON_ALARM) {
             cb_alarm_btn_extwake();
-            if (_sleep_mode_pass()) _wake_from_sleep_mode();
+            _run_sleep_mode_pass();
         }
         return;
     }
@@ -981,7 +1001,7 @@ void harness_button_down(harness_button_t button) {
         case BUTTON_MODE: cb_mode_btn_interrupt(); break;
         case BUTTON_ALARM: cb_alarm_btn_interrupt(); break;
     }
-    _app_loop();
+    _run_app_loop();
 }
 
 void harness_button_up(harness_button_t button) {
@@ -993,13 +1013,14 @@ void harness_button_up(harness_button_t button) {
         case BUTTON_MODE: cb_mode_btn_interrupt(); break;
         case BUTTON_ALARM: cb_alarm_btn_interrupt(); break;
     }
-    _app_loop();
+    _run_app_loop();
 }
 
 void harness_press(harness_button_t button, harness_press_t press) {
     harness_button_down(button);
     if (press == PRESS_LONG) {
-        for (int i = 0; i < MOVEMENT_LONG_PRESS_TICKS; i++) _step();
+        // The long-press timeout fires one count after it matches (harness_hw.c).
+        for (int i = 0; i <= MOVEMENT_LONG_PRESS_TICKS; i++) _step();
     }
     harness_button_up(button);
 }

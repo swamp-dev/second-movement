@@ -203,7 +203,7 @@ static void test_rings_in_background(void) {
     harness_buzzer_clear();
 
     harness_advance(130);
-    CHECK(harness_buzzer_count() >= 1);
+    CHECK_EQ_INT(harness_buzzer_count(), 5, "five rings, with the face off screen");
     CHECK(!harness_background_task(NULL));
 
     harness_press(BUTTON_MODE, PRESS_SHORT);  // and back
@@ -244,6 +244,22 @@ static void test_low_energy(void) {
     harness_press(BUTTON_ALARM, PRESS_SHORT);
     CHECK(!harness_is_sleeping());
     harness_tick(1);  // ticks are back
+
+    // Asleep on the timer itself (a 30-minute timeout outlasts the 10 minutes
+    // to low-energy mode), waking redraws it at once, with no tick needed.
+    settings.bit.to_interval = 3;
+    start_face(settings, date_time(2026, 3, 1, 12, 0, 0));
+    harness_advance(10 * 60 + 1);
+    CHECK(harness_is_sleeping());
+    CHECK_EQ_INT(harness_current_face(), HARNESS_FACE_INDEX, "asleep on the timer");
+    fake_lcd_reset(lcd);
+    harness_button_down(BUTTON_ALARM);
+    CHECK(!harness_is_sleeping());
+    CHECK(SHOWS(WATCH_POSITION_TOP_LEFT, "TMR", "TR"));
+    CHECK(BOTTOM_SHOWS("000200"));
+    harness_button_up(BUTTON_ALARM);
+    CHECK(SHOWS(WATCH_POSITION_TOP_RIGHT, " 1", " 1"));  // waking doesn't press the button
+    settings.bit.to_interval = 0;
 
     // A running timer keeps it awake, and the face on screen.
     start_face(settings, date_time(2026, 3, 1, 12, 0, 0));

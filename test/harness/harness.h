@@ -7,7 +7,9 @@
 // that only calls movement_default_loop_handler, and index 1
 // (HARNESS_FACE_INDEX) is the face under test. So a face that calls
 // movement_move_to_face(0), or times out, leaves the screen as it would on
-// the watch, and a short MODE press on the home face brings it back.
+// the watch, and a short MODE press on the home face brings it back. There's
+// no secondary face (MOVEMENT_SECONDARY_FACE_INDEX is 0), and the watch boots
+// straight onto the face under test rather than onto face 0.
 //
 // Time is the RTC counter at 128 Hz, as on the watch. Every harness call that
 // lets time pass steps that counter one count at a time and fires whatever
@@ -40,7 +42,7 @@ typedef enum {
 
 typedef enum {
     PRESS_SHORT,  // down and up with no time between them
-    PRESS_LONG,   // down, held until the long-press event (0.5 s), then up
+    PRESS_LONG,   // down, held until the long-press event (0.5 s and a count), then up
 } harness_press_t;
 
 typedef struct {
@@ -62,7 +64,8 @@ movement_settings_t harness_default_settings(void);
 
 // Resets everything: the display (to `lcd`), the RTC (to `utc`, at the start
 // of a second), movement's state, the buzzer and LED logs, and the face under
-// test (its context is freed). Call it before every test.
+// test (its context is freed with free(); anything the context points to
+// isn't). Call it before every test.
 void harness_init(watch_lcd_type_t lcd, watch_date_time_t utc, movement_settings_t settings);
 
 // Installs `face` at HARNESS_FACE_INDEX and boots it as app_setup does on

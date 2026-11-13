@@ -2,6 +2,7 @@
 // (counter, time, compare and periodic callbacks), the buzzer, the LED, the
 // buttons and the sleep animation. The display is test/fakes/fake_lcd.c.
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -9,12 +10,22 @@
 #include "watch.h"
 #include "watch_utility.h"
 
+static void _fail(const char *message) {
+    fprintf(stderr, "harness: %s\n", message);
+    abort();
+}
+
 // ---------------------------------------------------------------------------
 // RTC. As on the watch, a 32-bit counter runs at 128 Hz and the time of day is
 // derived from it. The formulas are the simulator's
 // (watch-library/simulator/watch/watch_rtc.c:95-106): the second rolls over
 // when the counter's low 7 bits reach 64, which is also when the 1 Hz
 // periodic callback fires, so movement's 1 Hz tick lands on subsecond 0.
+// Faster ticks fire where the hardware's do (watch_rtc.c:206-219 in the
+// simulator): 2 Hz at 32 and 96, 4 Hz at 16, 48, 80 and 112, and so on, so a
+// 4 Hz tick has subsecond 0 a sixteenth of a second after the second begins.
+// A compare callback fires one count after its counter matches, as on the
+// hardware (watch_rtc.c:246 in the simulator).
 
 #define RTC_CNT_HZ 128
 #define RTC_CNT_SUBSECOND_MASK (RTC_CNT_HZ - 1)
@@ -66,12 +77,12 @@ uint32_t watch_rtc_get_ticks_per_minute(void) {
 }
 
 void watch_rtc_register_comp_callback_no_schedule(watch_cb_t callback, rtc_counter_t at, uint8_t index) {
-    if (index >= RTC_NUM_COMP) abort();
+    if (index >= RTC_NUM_COMP) _fail("compare callback index out of range");
     comp_callbacks[index] = (comp_cb_t){.counter = at, .callback = callback, .enabled = true};
 }
 
 void watch_rtc_disable_comp_callback_no_schedule(uint8_t index) {
-    if (index >= RTC_NUM_COMP) abort();
+    if (index >= RTC_NUM_COMP) _fail("compare callback index out of range");
     comp_callbacks[index].enabled = false;
 }
 
@@ -112,6 +123,7 @@ static void (*buzzer_cb_finished)(void);
 static harness_sound_t sounds[MAX_SOUNDS];
 static size_t sound_count;
 
+
 // How many 64 Hz ticks cb_watch_buzzer_seq (watch_tcc.c:113-148) takes to
 // reach the end of `sequence`, following its repeat markers the same way.
 static uint32_t _sequence_ticks(const int8_t *sequence) {
@@ -143,7 +155,8 @@ static uint32_t _sequence_ticks(const int8_t *sequence) {
             return ticks;
         }
     }
-    abort();  // a sequence that never ends
+    _fail("a buzzer sequence that never ends");
+    return 0;
 }
 
 void watch_buzzer_register_global_callbacks(watch_cb_t cb_start, watch_cb_t cb_stop) {
@@ -162,15 +175,17 @@ void watch_buzzer_play_sequence_with_volume(int8_t *note_sequence, void (*callba
     watch_buzzer_abort_sequence();
     if (buzzer_cb_start_global) buzzer_cb_start_global();
 
-    if (sound_count == MAX_SOUNDS) abort();
+    if (sound_count == MAX_SOUNDS) _fail("more than 256 sounds logged; call harness_buzzer_clear");
     harness_sound_t *sound = &sounds[sound_count++];
     memset(sound, 0, sizeof(*sound));
     sound->volume = volume;
     // Copy note/duration pairs up to the terminating 0 note.
-    for (size_t i = 0; i + 1 < HARNESS_MAX_SEQUENCE; i += 2) {
+    size_t i = 0;
+    while (note_sequence[i] != 0) {
+        if (i + 2 >= HARNESS_MAX_SEQUENCE) _fail("a buzzer sequence longer than HARNESS_MAX_SEQUENCE");
         sound->sequence[i] = note_sequence[i];
-        if (note_sequence[i] == 0) break;
         sound->sequence[i + 1] = note_sequence[i + 1];
+        i += 2;
     }
 
     buzzer_active = true;
@@ -202,7 +217,7 @@ size_t harness_buzzer_count(void) {
 }
 
 const harness_sound_t *harness_buzzer_log(size_t index) {
-    if (index >= sound_count) abort();
+    if (index >= sound_count) _fail("harness_buzzer_log past the last sound");
     return &sounds[index];
 }
 
@@ -291,14 +306,14 @@ bool hw_step(void) {
 
     for (int per_n = 7; per_n >= 0; per_n--) {
         uint32_t period = 1u << per_n;
-        if (periodic_callbacks[per_n] && ((counter + RTC_CNT_HZ / 2) & (period - 1)) == 0) {
+        if (periodic_callbacks[per_n] && (period == 1 || (counter & (period - 1)) == period / 2)) {
             periodic_callbacks[per_n]();
             fired = true;
         }
     }
 
     for (int i = 0; i < RTC_NUM_COMP; i++) {
-        if (comp_callbacks[i].enabled && comp_callbacks[i].counter == counter) {
+        if (comp_callbacks[i].enabled && comp_callbacks[i].counter + 1 == counter) {
             comp_callbacks[i].enabled = false;
             comp_callbacks[i].callback();
             fired = true;
