@@ -137,7 +137,7 @@ These PRs always go to the user to merge, even when every condition holds:
 For these, stop `/ship-ticket` before step 5 (merge). Print the PR URL and
 its CI status, and leave the claim, worktree and branch in place. After the
 user merges, post the closeout comment (`/ship-ticket` step 6 format) and
-clean up (step 7).
+clean up ([Cleanup after a merge](#cleanup-after-a-merge)).
 
 **Admin merge** (bypassing hosted CI) is never the agent's call. It's
 governed by `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`, and the
@@ -174,33 +174,58 @@ user decides.
 
 Every worktree here has submodules, so `git worktree remove` always refuses
 ("working trees containing submodules cannot be moved or removed"), and
-after a squash merge `git branch -d` refuses too. `/ship-ticket` step 7
-forbids `--force` and leaves `-D` to the user. **This repo relaxes that:**
-the owner has given a standing go-ahead, so the agent runs both itself and
-doesn't hand the commands back.
+after a squash merge `git branch -d` usually refuses too. `/ship-ticket`
+step 7 forbids `--force` and leaves `-D` to the user. **This repo relaxes
+that**, for these two commands only: the owner has given a standing
+go-ahead, recorded here so it holds in every session. In step 7, after its
+`git fetch origin main`, run the block below from the main checkout in
+place of the plain `git worktree remove` and `git branch -d`, and don't
+hand the commands back to the user. Step 7's patch-id check isn't needed:
+the block requires the local branch to be exactly the PR's merged head.
+
+Run it only for the PR this `/ship-ticket` run merged, or one the user
+said in this conversation they merged. Put the three lines that set `fin`,
+`b` and `safe` and the block in one Bash call:
 
 ```bash
-git worktree remove --force ../sm-<N>-<slug>
-git branch -D <type>/<N>-<slug>
+pr() { gh pr view <P> -R swamp-dev/second-movement --json "$1" -q ".$1"; }
+[ "$(pr state)" = MERGED ] && fin=yes || fin=no
+b=$(pr headRefName); safe=$(pr headRefOid)
 ```
 
-Run them from the main checkout, only for the worktree and local branch of
-the PR this `/ship-ticket` run merged (or the user merged in this session),
-and only after all of these checks, in this order:
+```bash
+main=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
+w=$(git worktree list --porcelain | awk -v r="branch refs/heads/$b" '/^worktree /{p=substr($0,10)} $0==r{print p}')
+tip=$(git rev-parse --verify -q "refs/heads/$b")
+dirty=$(git -C "$w" status --short --ignored --ignore-submodules=none 2>&1 \
+  | grep -vE '^!! (build|build-sim|test/build|\.emscripten_cache)/$')
+sub=$(git -C "$w" submodule foreach --quiet --recursive \
+  'git stash list; git log --oneline HEAD --branches --not --remotes' 2>&1)
+case "$b" in ""|main|KnightConfig) fin=no ;; esac
+if [ "$fin" = yes ] && [ "$(git rev-parse --show-toplevel)" = "$main" ] \
+   && [ -n "$w" ] && [ "$w" != "$main" ] && [ -n "$tip" ] && [ "$tip" = "$safe" ] \
+   && [ -z "$dirty" ] && [ -z "$sub" ]; then
+  git worktree remove --force "$w" && git branch -D "$b" && echo "REMOVED $w $b"
+else
+  echo "LEFT: fin=$fin branch=$b worktree=$w tip=$tip safe=$safe"
+  printf '%s\n' "$dirty" "$sub"
+fi
+```
 
-1. `gh pr view <P> --json state -q .state` prints `MERGED`.
-2. `git -C ../sm-<N>-<slug> status --short` prints nothing.
-3. The patch-id check in `/ship-ticket` step 7 prints `SAME`, and its
-   `git log` prints nothing.
-
-If a check fails, leave the worktree and the branch, and tell the user what
-it printed. Never run `git submodule deinit` to get around the refusal: it
-strips the submodule entries from the config every worktree shares.
+It removes the worktree and the local branch only when all of these hold:
+the PR is merged; the branch is checked out in a worktree other than the
+main checkout; its tip is the commit that was merged; the worktree has no
+changes, untracked files, or ignored files other than build output (which
+`--force` deletes); and no submodule in it has a stash or a commit that
+isn't on one of its remotes (those live in the worktree's own git
+directory and go with it). If it prints `LEFT`, leave both and tell the
+user what it printed. Never run `git submodule deinit` to get around the
+refusal: it strips the submodule entries from the config every worktree
+shares.
 
 This doesn't cover anything else: another session's worktree or branch,
-`KnightConfig` and its worktree, a remote branch other than the merged PR's
-own (which `/ship-ticket` step 7 already deletes), or a worktree whose PR is
-still open.
+`KnightConfig` and its worktree, a worktree whose PR is still open, or a
+remote branch (`/ship-ticket` step 7 already deletes the merged PR's own).
 
 ---
 
@@ -391,15 +416,19 @@ these limits:
 
 When the upstream maintainers respond, or upstream's CI fails on the PR,
 tell the user and wait. The `up/` branch and its worktree stay until the
-upstream PR is merged or closed. A later session that finds it so removes
-them, after checking that the worktree is clean and that `origin` still has
-the branch at the local tip, so nothing is lost:
+upstream PR is merged or closed. After that, any session that sees the
+`sm-up-*` worktree in `git worktree list` may remove them, even for an
+older ticket (an exception to the limits above). Take the upstream PR from
+the ticket's `Sent upstream:` comment, and run these lines with the
+block in [Cleanup after a merge](#cleanup-after-a-merge), in one Bash call
+from the main checkout. Here the branch must be at the tip `origin` has, so
+nothing is lost:
 
 ```bash
-gh pr view <upstream PR> -R joeycastillo/second-movement --json state -q .state   # MERGED or CLOSED
-git -C ../sm-up-<N>-<slug> status --short                                          # prints nothing
-[ "$(git rev-parse up/<N>-<slug>)" = "$(git ls-remote --heads origin refs/heads/up/<N>-<slug> | cut -f1)" ] \
-  && git worktree remove --force ../sm-up-<N>-<slug> && git branch -D up/<N>-<slug>
+b=up/<N>-<slug>
+st=$(gh pr view <upstream PR> -R joeycastillo/second-movement --json state -q .state)
+{ [ "$st" = MERGED ] || [ "$st" = CLOSED ]; } && fin=yes || fin=no
+safe=$(git ls-remote --heads origin "refs/heads/$b" | cut -f1)
 ```
 
 The `up/` branch on `origin` stays; deleting it is the user's call.
