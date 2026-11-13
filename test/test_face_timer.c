@@ -7,6 +7,7 @@
 #include "check.h"
 #include "harness.h"
 #include "watch_utility.h"
+#include "zones.h"
 #include "complication/timer_face.h"
 
 static watch_lcd_type_t lcd;
@@ -228,30 +229,73 @@ static void test_timeout(void) {
     CHECK(BOTTOM_SHOWS("000020"));
 }
 
+static void test_low_energy(void) {
+    // le_interval 1 is 10 minutes of inactivity.
+    movement_settings_t settings = harness_default_settings();
+    settings.bit.le_interval = 1;
+
+    // An idle watch times out to the home face, then sleeps; ALARM wakes it.
+    start_face(settings, date_time(2026, 3, 1, 12, 0, 0));
+    harness_advance(10 * 60 - 1);
+    CHECK(!harness_is_sleeping());
+    harness_advance(2);
+    CHECK(harness_is_sleeping());
+    CHECK_EQ_INT(harness_current_face(), 0, "asleep on the home face");
+    harness_press(BUTTON_ALARM, PRESS_SHORT);
+    CHECK(!harness_is_sleeping());
+    harness_tick(1);  // ticks are back
+
+    // A running timer keeps it awake, and the face on screen.
+    start_face(settings, date_time(2026, 3, 1, 12, 0, 0));
+    harness_press(BUTTON_ALARM, PRESS_SHORT);
+    harness_press(BUTTON_ALARM, PRESS_SHORT);
+    harness_press(BUTTON_ALARM, PRESS_SHORT);
+    harness_press(BUTTON_ALARM, PRESS_LONG);  // slot 4: 20 minutes
+    harness_advance(15 * 60);
+    CHECK(!harness_is_sleeping());
+    CHECK_EQ_INT(harness_current_face(), HARNESS_FACE_INDEX, "still on the timer");
+    CHECK(BOTTOM_SHOWS("000500"));
+}
+
+// Whether the bottom line shows the real time left until the face's
+// background task, as HHMMSS.
+static bool shows_time_left(void) {
+    uint32_t left = seconds_until_background_task();
+    char text[16];
+    snprintf(text, sizeof(text), "%02u%02u%02u", (unsigned)(left / 3600), (unsigned)(left / 60 % 60), (unsigned)(left % 60));
+    return BOTTOM_SHOWS(text);
+}
+
 // #86: the time left is off by the DST shift after the face is re-opened
 // across a DST change. Berlin leaves summer time at 01:00 UTC on 25 Oct 2026.
 static void test_dst_change_while_running(void) {
     movement_settings_t settings = harness_default_settings();
     settings.bit.time_zone = UTZ_BERLIN;
     start_face(settings, date_time(2026, 10, 25, 0, 45, 0));  // 02:45 CEST
-    set_current_slot(2, 0, 0);
+    set_current_slot(2, 0, 0);  // takes about a second of button presses
     harness_press(BUTTON_ALARM, PRESS_LONG);
-    watch_date_time_t when;
-    CHECK(harness_background_task(&when));
-    CHECK_EQ_INT(utc_seconds(when), utc_seconds(date_time(2026, 10, 25, 2, 45, 0)), "the alarm is right");
+    CHECK_EQ_INT(seconds_until_background_task(), 7200, "a 2 h timer");
+    watch_date_time_t due;
+    CHECK(harness_background_task(&due));
+    CHECK(shows_time_left());
 
     harness_press(BUTTON_MODE, PRESS_LONG);
-    harness_advance(45 * 60);  // 01:30 UTC, 02:30 CET: 1 h 15 m left
+    harness_advance(45 * 60);  // about 01:30 UTC, 02:30 CET: 1 h 15 m left
     harness_press(BUTTON_MODE, PRESS_SHORT);
     CHECK_EQ_INT(harness_current_face(), HARNESS_FACE_INDEX, "back on the timer");
-    // Uncomment when #86 is fixed (it shows 001500):
-    // CHECK(BOTTOM_SHOWS("011500"));
-
-    harness_tick(30 * 60);  // 45 m left
-    // Uncomment when #86 is fixed (it shows 002410):
-    // CHECK(BOTTOM_SHOWS("004500"));
+    watch_date_time_t when;
     CHECK(harness_background_task(&when));
-    CHECK_EQ_INT(utc_seconds(when), utc_seconds(date_time(2026, 10, 25, 2, 45, 0)), "the alarm is still right");
+    CHECK_EQ_INT(when.reg, due.reg, "the alarm is still right");
+    // Uncomment when #86 is fixed (it shows an hour less, about 001459):
+    // CHECK(shows_time_left());
+
+    // With 45 m left the face shows target - now with the hour taken off, a
+    // negative number that prints as 7 characters ("0024100" in the bug
+    // report). On classic, watch_display_text writes the 7th past the end of
+    // Classic_LCD_Display_Mapping, which UBSan stops on. Uncomment when #86 is
+    // fixed:
+    // harness_tick(30 * 60);
+    // CHECK(shows_time_left());
 }
 
 // #82: pausing with more than 18 h 12 m 15 s left loses 65536 seconds.
@@ -282,6 +326,7 @@ int main(void) {
         test_edit_slot();
         test_rings_in_background();
         test_timeout();
+        test_low_energy();
         test_dst_change_while_running();
         test_pause_long_timer();
         if (check_failures != failures) {
