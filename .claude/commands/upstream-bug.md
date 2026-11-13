@@ -140,9 +140,8 @@ adding the command:
 ## 6. Status and stop
 
 Report the ticket, the PR here, the upstream issue and PR, and the leftovers
-(the `up/` worktree and branch stay until the upstream PR is merged or
-closed; [`docs/workflow.md` § What the agent may do](../../docs/workflow.md#what-the-agent-may-do)
-says who removes them then). Then stop.
+for the user to remove (the `up/` worktree and branch stay until the
+upstream PR is merged or closed). Then stop.
 
 ## Limits
 
