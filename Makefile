@@ -84,6 +84,7 @@ INCLUDES += \
   -I./lib/pet \
   -I./lib/zone_offset \
   -I./lib/segment_art \
+  -I./lib/moon_shape \
   -I./watch-library/shared/watch \
   -I./watch-library/shared/driver \
   -I./watch-faces/clock \
@@ -118,6 +119,7 @@ SRCS += \
   ./lib/pet/pet.c \
   ./lib/zone_offset/zone_offset.c \
   ./lib/segment_art/segment_art.c \
+  ./lib/moon_shape/moon_shape.c \
   ./watch-library/shared/driver/thermistor_driver.c \
   ./watch-library/shared/watch/watch_common_buzzer.c \
   ./watch-library/shared/watch/watch_common_display.c \
