@@ -1,6 +1,6 @@
 // pet_face (watch-faces/complication/pet_face.c) on the face harness, on both
 // LCD types: what the top line shows for an egg, a baby, an adult, a
-// sleeping pet, a dead one and an unreadable save, and that going from one
+// sleeping pet, low-energy mode, a dead one and an unreadable save, and that going from one
 // to the next leaves nothing of the old picture. The rules of the pet and
 // the choice of sprite are tested in test_pet.c.
 
@@ -35,11 +35,13 @@ static watch_date_time_t noon(void) {
 }
 
 // Boots the face with `saved` as its save file (NULL: no file). The
-// inactivity timeout is 30 minutes, so the face stays on screen while a few
-// minutes pass.
+// inactivity timeout is 30 minutes and low-energy mode starts after 10, so
+// the face stays on screen while a few minutes pass and is still there when
+// the watch goes to sleep.
 static void start_face(const pet_state_t *saved) {
     movement_settings_t settings = harness_default_settings();
     settings.bit.to_interval = 3;
+    settings.bit.le_interval = 1;
     harness_init(lcd, noon(), settings);
     if (saved != NULL) {
         uint8_t buf[PET_SAVE_SIZE];
@@ -147,6 +149,25 @@ static void test_moods_of_a_baby(void) {
     check_top(C, D | G, E, "tI", "tired baby");
 }
 
+// In low-energy mode the watch shows a living pet asleep, whatever its mood,
+// and the pet itself is as it was when the watch wakes.
+static void test_low_energy_mode(void) {
+    pet_state_t pet = pet_at(PET_STAGE_BABY);
+    start_face(&pet);
+    check_top(C, B | F | G, E, "CO", "baby before the watch sleeps");
+
+    harness_advance(10 * 60 + 1);
+    CHECK(harness_is_sleeping());
+    CHECK_EQ_INT(harness_current_face(), HARNESS_FACE_INDEX, "asleep on the pet");
+    check_top(C, G, E, "SL", "baby in low-energy mode");
+    CHECK(fake_lcd_shows(WATCH_POSITION_BOTTOM, "      "));
+    CHECK(!harness_indicator(WATCH_INDICATOR_SLEEP));  // the pet isn't asleep, the watch is
+
+    harness_press(BUTTON_ALARM, PRESS_SHORT);  // wakes the watch
+    CHECK(!harness_is_sleeping());
+    check_top(C, B | F | G, E, "CO", "baby after the watch wakes");
+}
+
 static void test_grave_then_new_egg(void) {
     pet_state_t pet = pet_at(PET_STAGE_DEAD);
     start_face(&pet);
@@ -181,6 +202,7 @@ int main(void) {
         test_egg_hatches();
         test_adult_goes_to_bed_and_gets_up();
         test_moods_of_a_baby();
+        test_low_energy_mode();
         test_grave_then_new_egg();
         test_unreadable_save_then_new_egg();
     }

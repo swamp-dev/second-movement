@@ -4,6 +4,7 @@
 #include <string.h>
 #include "check.h"
 #include "pet.h"
+#include "segment_art.h"
 
 #define HOUR 3600UL
 #define T0 1800000000UL
@@ -301,7 +302,8 @@ static void test_page_after_action(void) {
 static void check_screen_fits(const pet_screen_t *s) {
     // On custom the top is either a sprite or all 5 characters, so a shorter
     // word leaves nothing behind.
-    if (!s->has_sprite) CHECK(strlen(s->top) == 5);
+    if (s->has_sprite) CHECK(s->top[0] == '\0' && s->top[5] == '\0');
+    else CHECK(strlen(s->top) == 5);
     CHECK(strlen(s->top_fallback) == 2);
     CHECK(strlen(s->bottom) == 6);
     // The classic LCD ties the top and bottom segments of bottom characters 0
@@ -331,14 +333,14 @@ static void check_screen(const pet_state_t *pet, pet_action_t action, pet_page_t
 
 // ---- sprites ----
 
-#define A 0x01 // segment bits as in lib/segment_art: A top, then clockwise
-#define B 0x02 // to F, G the middle bar, H the upright in the middle
-#define C 0x04
-#define D 0x08
-#define E 0x10
-#define F 0x20
-#define G 0x40
-#define H 0x80
+#define A SEGMENT_ART_A
+#define B SEGMENT_ART_B
+#define C SEGMENT_ART_C
+#define D SEGMENT_ART_D
+#define E SEGMENT_ART_E
+#define F SEGMENT_ART_F
+#define G SEGMENT_ART_G
+#define H SEGMENT_ART_H
 
 // The frames around the face: a full box for an adult, the lower half of its
 // sides for a baby.

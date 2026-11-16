@@ -160,7 +160,9 @@ pet_page_t pet_page_after_action(pet_action_t action, bool applied, pet_page_t p
 typedef struct {
     // Custom LCD, top line. With has_sprite, `sprite` holds one mask per top
     // character for segment_art_draw (bit 0 is segment A, bit 7 is H) and
-    // `top` is empty. Without it, `top` is 5 characters of text.
+    // `top` is empty. Without it, `top` is 5 characters of text. has_sprite
+    // says what this screen is, not which LCD is fitted: the face draws the
+    // sprite on custom only, and top_fallback on classic either way.
     //
     // The pet is a face in the second character, framed by the first and
     // third: a full box around an adult, the lower half of its sides around

@@ -24,6 +24,8 @@
 
 #include <string.h>
 #include "pet.h"
+// For the SEGMENT_ART_* bit names only; nothing here draws.
+#include "segment_art.h"
 
 void pet_init(pet_state_t *pet, uint32_t now) {
     memset(pet, 0, sizeof(*pet));
@@ -156,16 +158,17 @@ static void label_and_value(char bottom[7], const char *label, uint32_t value) {
     } while (value);
 }
 
-// Segment bits as lib/segment_art takes them: A is the top bar, then
-// clockwise to F, G is the middle bar and H the upright in the middle.
-#define A 0x01
-#define B 0x02
-#define C 0x04
-#define D 0x08
-#define E 0x10
-#define F 0x20
-#define G 0x40
-#define H 0x80
+// Short names for the segments, for the sprite tables only: A is the top
+// bar, then clockwise to F, G is the middle bar and H the upright in the
+// middle. They are undefined again after pet_render.
+#define A SEGMENT_ART_A
+#define B SEGMENT_ART_B
+#define C SEGMENT_ART_C
+#define D SEGMENT_ART_D
+#define E SEGMENT_ART_E
+#define F SEGMENT_ART_F
+#define G SEGMENT_ART_G
+#define H SEGMENT_ART_H
 
 // What the top line shows for a living pet, worst news first.
 typedef enum {
@@ -206,7 +209,7 @@ static void set_top(pet_screen_t *screen, uint8_t left, uint8_t middle, uint8_t 
     screen->sprite[0] = left;
     screen->sprite[1] = middle;
     screen->sprite[2] = right;
-    screen->top[0] = '\0';
+    memset(screen->top, 0, sizeof(screen->top));
     strcpy(screen->top_fallback, letters);
 }
 
@@ -265,6 +268,15 @@ void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, pe
             break;
     }
 }
+
+#undef A
+#undef B
+#undef C
+#undef D
+#undef E
+#undef F
+#undef G
+#undef H
 
 void pet_render_unreadable(pet_screen_t *screen) {
     screen->has_sprite = false;
