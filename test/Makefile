@@ -3,12 +3,12 @@
 
 # CC is make's default (cc) unless the environment sets it (the nix shell sets gcc).
 CFLAGS := -std=c11 -Wall -Wextra -Werror -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all
-CPPFLAGS := -I. -I../lib/zodiac -I../lib/planetary -I../lib/sunriset -I../lib/sun_events -I../lib/pet -I../lib/zone_offset -I../utz
+CPPFLAGS := -I. -I../lib/zodiac -I../lib/planetary -I../lib/sunriset -I../lib/sun_events -I../lib/pet -I../lib/zone_offset -I../lib/segment_art -I../utz
 LDLIBS := -lm
 
 # One program per test file: add test_<name> to TESTS and list its sources
 # as test_<name>_SRCS.
-TESTS := test_zodiac test_planetary test_sun_events test_pet test_filesystem test_zone_offset test_display
+TESTS := test_zodiac test_planetary test_sun_events test_pet test_filesystem test_zone_offset test_display test_segment_art
 TESTS += test_face_timer test_face_countdown
 test_zodiac_SRCS := test_zodiac.c ../lib/zodiac/zodiac.c ../lib/sunriset/sunriset.c
 test_planetary_SRCS := test_planetary.c ../lib/planetary/planetary.c ../lib/sun_events/sun_events.c ../lib/sunriset/sunriset.c
@@ -24,6 +24,8 @@ build/test_filesystem: CPPFLAGS += -Istubs -I../filesystem -I../littlefs -I../li
 # real watch.h, which needs a board pins.h (stubs/board) and gossamer's eic.h.
 test_display_SRCS := test_display.c fakes/fake_lcd.c ../watch-library/shared/watch/watch_common_display.c
 build/test_display: CPPFLAGS += -Ifakes -Istubs/board -I../watch-library/shared/watch -I../gossamer/common
+test_segment_art_SRCS := test_segment_art.c ../lib/segment_art/segment_art.c fakes/fake_lcd.c ../watch-library/shared/watch/watch_common_display.c
+build/test_segment_art: CPPFLAGS += -Ifakes -Istubs/board -I../watch-library/shared/watch -I../gossamer/common
 
 # Face tests: one watch face on the harness in harness/, which stands in for
 # movement and the hardware (see harness/harness.h). A new face test is
