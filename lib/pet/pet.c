@@ -156,9 +156,58 @@ static void label_and_value(char bottom[7], const char *label, uint32_t value) {
     } while (value);
 }
 
-static void set_mood(pet_screen_t *screen, const char *top, const char *fallback) {
-    strcpy(screen->top, top);
-    strcpy(screen->top_fallback, fallback);
+// Segment bits as lib/segment_art takes them: A is the top bar, then
+// clockwise to F, G is the middle bar and H the upright in the middle.
+#define A 0x01
+#define B 0x02
+#define C 0x04
+#define D 0x08
+#define E 0x10
+#define F 0x20
+#define G 0x40
+#define H 0x80
+
+// What the top line shows for a living pet, worst news first.
+typedef enum {
+    MOOD_ASLEEP = 0,
+    MOOD_HUNGRY,
+    MOOD_TIRED,
+    MOOD_SAD,
+    MOOD_HAPPY,
+    MOOD_COOL,
+    MOOD_COUNT,
+} mood_t;
+
+// Each mood as a face in one character, and as two letters for classic.
+static const struct {
+    uint8_t face;
+    char letters[3];
+} moods[MOOD_COUNT] = {
+    [MOOD_ASLEEP] = {G, "SL"},             // eyes shut
+    [MOOD_HUNGRY] = {C | D | E | G, "HU"}, // mouth wide open
+    [MOOD_TIRED] = {D | G, "tI"},          // eyes shut over a shut mouth
+    [MOOD_SAD] = {C | E | G, "SA"},        // a frown
+    [MOOD_HAPPY] = {B | F | D, "HA"},      // eyes over a wide mouth
+    [MOOD_COOL] = {B | F | G, "CO"},       // eyes over a small mouth
+};
+
+static mood_t mood_of(const pet_state_t *pet, pet_page_t page) {
+    if (pet->asleep || page == PET_PAGE_DOZE) return MOOD_ASLEEP;
+    if (pet->fullness <= PET_STAT_CRITICAL) return MOOD_HUNGRY;
+    if (pet->energy <= PET_STAT_CRITICAL) return MOOD_TIRED;
+    if (pet->happiness <= PET_STAT_CRITICAL) return MOOD_SAD;
+    if (pet->fullness >= PET_STAT_CONTENT && pet->happiness >= PET_STAT_CONTENT && pet->energy >= PET_STAT_CONTENT) return MOOD_HAPPY;
+    return MOOD_COOL;
+}
+
+static void set_top(pet_screen_t *screen, uint8_t left, uint8_t middle, uint8_t right, const char *letters) {
+    screen->has_sprite = true;
+    memset(screen->sprite, 0, sizeof(screen->sprite));
+    screen->sprite[0] = left;
+    screen->sprite[1] = middle;
+    screen->sprite[2] = right;
+    screen->top[0] = '\0';
+    strcpy(screen->top_fallback, letters);
 }
 
 void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, pet_screen_t *screen) {
@@ -175,14 +224,15 @@ void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, pe
     screen->bell = pet_needs_attention(pet);
     screen->sleep = alive && pet->asleep;
 
-    if (pet->stage == PET_STAGE_DEAD) set_mood(screen, "RIP  ", "RI");
-    else if (pet->stage == PET_STAGE_EGG) set_mood(screen, "EGG  ", "O ");
-    else if (pet->asleep || page == PET_PAGE_DOZE) set_mood(screen, "SLEEP", "SL");
-    else if (pet->fullness <= PET_STAT_CRITICAL) set_mood(screen, "HUNGr", "HU");
-    else if (pet->energy <= PET_STAT_CRITICAL) set_mood(screen, "tIrEd", "tI");
-    else if (pet->happiness <= PET_STAT_CRITICAL) set_mood(screen, "SAd  ", "SA");
-    else if (pet->fullness >= PET_STAT_CONTENT && pet->happiness >= PET_STAT_CONTENT && pet->energy >= PET_STAT_CONTENT) set_mood(screen, "HAPPY", "HA");
-    else set_mood(screen, "COOL ", "CO");
+    if (pet->stage == PET_STAGE_DEAD) {
+        set_top(screen, D, D | G | H, D, "RI");  // a cross on the ground
+    } else if (pet->stage == PET_STAGE_EGG) {
+        set_top(screen, 0, A | B | C | D | E | F, 0, "O ");
+    } else {
+        mood_t mood = mood_of(pet, page);
+        if (pet->stage == PET_STAGE_BABY) set_top(screen, C, moods[mood].face, E, moods[mood].letters);
+        else set_top(screen, A | D | E | F, moods[mood].face, A | B | C | D, moods[mood].letters);
+    }
 
     strcpy(screen->bottom, "      ");
     if (page == PET_PAGE_DOZE) return;
@@ -217,7 +267,10 @@ void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, pe
 }
 
 void pet_render_unreadable(pet_screen_t *screen) {
-    set_mood(screen, "FILE ", "FI");
+    screen->has_sprite = false;
+    memset(screen->sprite, 0, sizeof(screen->sprite));
+    strcpy(screen->top, "FILE ");
+    strcpy(screen->top_fallback, "FI");
     strcpy(screen->bottom, "Error ");
     screen->bell = false;
     screen->sleep = false;

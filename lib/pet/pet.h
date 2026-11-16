@@ -153,9 +153,25 @@ typedef enum {
 // refusal.
 pet_page_t pet_page_after_action(pet_action_t action, bool applied, pet_page_t page);
 
+// The top characters of the custom LCD, left to right: the three of the
+// top-left group, then the two of the top right.
+#define PET_SPRITE_WIDTH 5
+
 typedef struct {
-    char top[6];          // 5 characters (space-padded), for the custom LCD
-    char top_fallback[3]; // 2 characters, for the classic LCD
+    // Custom LCD, top line. With has_sprite, `sprite` holds one mask per top
+    // character for segment_art_draw (bit 0 is segment A, bit 7 is H) and
+    // `top` is empty. Without it, `top` is 5 characters of text.
+    //
+    // The pet is a face in the second character, framed by the first and
+    // third: a full box around an adult, the lower half of its sides around
+    // a baby. The face is the mood. An egg is an oval and a dead pet a cross
+    // on the ground, both unframed. The last two characters stay blank.
+    bool has_sprite;
+    uint8_t sprite[PET_SPRITE_WIDTH];
+    char top[6];
+    // Classic LCD, top line: 2 characters. Its two top characters are too
+    // few and too crude for a pet, so it names the mood instead.
+    char top_fallback[3];
     char bottom[7];       // 6 characters
     bool bell;            // needs attention
     bool sleep;           // pet asleep
@@ -163,7 +179,8 @@ typedef struct {
 
 void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, pet_screen_t *screen);
 
-// The screen for PET_LOAD_UNREADABLE (see below): FILE / Error.
+// The screen for PET_LOAD_UNREADABLE (see below): FILE / Error, as text on
+// both LCDs.
 void pet_render_unreadable(pet_screen_t *screen);
 
 // ---- Save file ----
