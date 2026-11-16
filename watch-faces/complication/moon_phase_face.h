@@ -41,6 +41,16 @@
  * crescent at the top left.
  * 
  * All segments turn off during a new moon.
+ *
+ * On the custom LCD the moon is larger: the first two characters of the top
+ * row make one disc, and the segments that turn on trace the lit part of it.
+ * A waxing crescent is a bracket on the right, the first quarter closes it
+ * into a half, the gibbous moon reaches into the left character, and the
+ * full moon is the whole ring. The waning half of the month mirrors this on
+ * the left. Nothing is drawn at new moon.
+ *
+ * South of the equator (from the location set in the Sunrise/Sunset or
+ * Planetary Hours face) the drawing is mirrored, as the moon is seen there.
  * 
  * On this screen you may press the Alarm button repeatedly to move forward
  * in time: the day of the month at the top right will advance by one day for
