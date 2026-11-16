@@ -36,34 +36,36 @@ static bool southern;
 typedef struct {
     const char *name;
     double day;
-    const char *top_left;        // custom; classic shows the drawing there
     const char *bottom_custom;
     const char *bottom_classic;
-    uint8_t classic;             // segments of classic position 0, northern
+    // The drawing in the northern hemisphere, as segments: classic position
+    // 0, and custom positions 0 and 1, which form one disc.
+    uint8_t classic;
+    uint8_t custom_left, custom_right;
 } shape_t;
 
 static const shape_t shapes[] = {
-    {"new",             0.5,  "   ", "NE!J  ", " Neu  ", 0},
-    {"thin waxing",     2.5,  "WAX", "CresNt", "CresNt", C | D},
-    {"thick waxing",    5.0,  "WAX", "CresNt", "CresNt", B | C | D},
-    {"first quarter",   7.4,  "WAX", "1stQtr", " 1st q", B | C | D | H},
-    {"waxing gibbous",  11.0, "WAX", "GbboUs", " Gibb ", B | C | D | G | H},
-    {"full",            14.8, "   ", "FULL  ", " FULL ", A | B | C | D | E | F | G | H},
-    {"waning gibbous",  18.5, "WAN", "GbboUs", " Gibb ", A | E | F | G | H},
-    {"third quarter",   22.1, "WAN", "3rdQtr", " 3rd q", A | E | F | H},
-    {"thick waning",    24.5, "WAN", "CresNt", "CresNt", A | E | F},
-    {"thin waning",     27.2, "WAN", "CresNt", "CresNt", A | F},
+    {"new",             0.5,  "NE!J  ", " Neu  ", 0, 0, 0},
+    {"thin waxing",     2.5,  "CresNt", "CresNt", C | D, 0, A | B | C | D},
+    {"thick waxing",    5.0,  "CresNt", "CresNt", B | C | D, 0, A | B | C | D | H},
+    {"first quarter",   7.4,  "1stQtr", " 1st q", B | C | D | H, 0, A | B | C | D | E | F},
+    {"waxing gibbous",  11.0, "GbboUs", " Gibb ", B | C | D | G | H, A | D | H, A | B | C | D},
+    {"full",            14.8, "FULL  ", " FULL ", A | B | C | D | E | F | G | H, A | D | E | F, A | B | C | D},
+    {"waning gibbous",  18.5, "GbboUs", " Gibb ", A | E | F | G | H, A | D | E | F, A | D | H},
+    {"third quarter",   22.1, "3rdQtr", " 3rd q", A | E | F | H, A | B | C | D | E | F, 0},
+    {"thick waning",    24.5, "CresNt", "CresNt", A | E | F, A | D | E | F | H, 0},
+    {"thin waning",     27.2, "CresNt", "CresNt", A | F, A | D | E | F, 0},
 };
 #define NUM_SHAPES (sizeof(shapes) / sizeof(shapes[0]))
 
 // The shape drawn in the southern hemisphere is the one the north sees at
-// the mirrored point of the month.
+// the mirrored point of the month. On custom, where the drawing is
+// symmetric, that is also its mirror image.
 static const shape_t *mirrored(size_t shape) {
     return &shapes[shape == 0 ? 0 : NUM_SHAPES - shape];
 }
 
-// The row with the bottom text: the quarters swap names in the south. WAX and
-// WAN in the top left don't.
+// The row with the bottom text: the quarters swap names in the south.
 static const shape_t *named_as(size_t shape) {
     if (southern && (shape == 3 || shape == 7)) return &shapes[NUM_SHAPES - shape];
     return &shapes[shape];
@@ -105,7 +107,9 @@ static void check_screen(size_t shape, uint8_t day_of_month) {
 
     int failures = check_failures;
     if (lcd == WATCH_LCD_TYPE_CUSTOM) {
-        CHECK(fake_lcd_shows(WATCH_POSITION_TOP_LEFT, shapes[shape].top_left));
+        CHECK_EQ_INT(segments_at(0), drawn->custom_left, "the moon's left half");
+        CHECK_EQ_INT(segments_at(1), drawn->custom_right, "the moon's right half");
+        CHECK_EQ_INT(segments_at(10), 0, "nothing beside the moon");
         CHECK(fake_lcd_shows(WATCH_POSITION_BOTTOM, name->bottom_custom));
     } else {
         CHECK_EQ_INT(segments_at(0), drawn->classic, "the moon");
