@@ -946,37 +946,70 @@ movement_settings_t harness_default_settings(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Files: filesystem/filesystem.h's read call over what a test stored.
+// Files: the filesystem/filesystem.h calls the tested faces make, over a few
+// small files in memory.
 
 static struct {
-    const char *name;
+    char name[HARNESS_MAX_FILE_NAME + 1];
     char data[HARNESS_MAX_FILE_SIZE];
     size_t length;
 } files[HARNESS_MAX_FILES];
 static size_t file_count;
 
+static int find_file(const char *name) {
+    for (size_t i = 0; i < file_count; i++) {
+        if (strcmp(files[i].name, name) == 0) return (int)i;
+    }
+    return -1;
+}
+
 void harness_write_file(const char *name, const void *data, size_t length) {
-    if (file_count >= HARNESS_MAX_FILES || length > HARNESS_MAX_FILE_SIZE) {
-        fprintf(stderr, "harness_write_file: no room for %s\n", name);
+    int i = find_file(name);
+    if (i < 0) {
+        if (file_count >= HARNESS_MAX_FILES || strlen(name) > HARNESS_MAX_FILE_NAME) {
+            fprintf(stderr, "harness_write_file: no room for %s\n", name);
+            abort();
+        }
+        i = (int)file_count++;
+        strcpy(files[i].name, name);
+    }
+    if (length > HARNESS_MAX_FILE_SIZE) {
+        fprintf(stderr, "harness_write_file: %s is too long\n", name);
         abort();
     }
-    files[file_count].name = name;
-    memcpy(files[file_count].data, data, length);
-    files[file_count].length = length;
-    file_count++;
+    memcpy(files[i].data, data, length);
+    files[i].length = length;
+}
+
+size_t harness_read_file(const char *name, void *buf, size_t size) {
+    int i = find_file(name);
+    if (i < 0) return 0;
+    size_t n = size < files[i].length ? size : files[i].length;
+    memcpy(buf, files[i].data, n);
+    return n;
 }
 
 // As filesystem.c: the buffer is zeroed, then filled with up to `length`
 // bytes; false if the file is missing or empty.
 bool filesystem_read_file(char *filename, char *buf, int32_t length) {
     memset(buf, 0, (size_t)length);
-    for (size_t i = 0; i < file_count; i++) {
-        if (strcmp(files[i].name, filename) != 0 || files[i].length == 0) continue;
-        size_t n = (size_t)length < files[i].length ? (size_t)length : files[i].length;
-        memcpy(buf, files[i].data, n);
-        return true;
-    }
-    return false;
+    return harness_read_file(filename, buf, (size_t)length) > 0;
+}
+
+bool filesystem_write_file(char *filename, char *text, int32_t length) {
+    if (length < 0) return false;
+    harness_write_file(filename, text, (size_t)length);
+    return true;
+}
+
+// The harness's lookups never fail, so absent is simply "not there".
+bool filesystem_file_is_absent(char *filename) {
+    return find_file(filename) < 0;
+}
+
+int32_t filesystem_get_file_size(char *filename) {
+    int i = find_file(filename);
+    return i < 0 ? -1 : (int32_t)files[i].length;
 }
 
 void harness_init(watch_lcd_type_t lcd, watch_date_time_t utc, movement_settings_t settings) {

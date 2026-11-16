@@ -119,11 +119,15 @@ bool harness_buzzer_playing(void);
 
 harness_led_t harness_led(void);
 
-// The harness has no filesystem, only the files a test stores here, which
-// filesystem_read_file then finds. harness_init removes them all, so call
-// this after it. `name` must be a string that outlives the test.
+// The harness has no flash, only a few small files in memory, which the
+// filesystem_* calls a face makes read and write. harness_write_file creates
+// or replaces one; harness_read_file copies up to `size` bytes of one and
+// returns how many (0 if there is no such file). harness_init removes them
+// all, so store a file after it and before harness_load_face.
 #define HARNESS_MAX_FILES 4
+#define HARNESS_MAX_FILE_NAME 15
 #define HARNESS_MAX_FILE_SIZE 32
 void harness_write_file(const char *name, const void *data, size_t length);
+size_t harness_read_file(const char *name, void *buf, size_t size);
 
 #endif // HARNESS_H_
