@@ -65,9 +65,10 @@ static int differences(const pixels_t expected) {
 // that no pixel outside the position changes.
 static void test_every_mask_at_every_position(void) {
     for (size_t t = 0; t < 2; t++) {
+        fake_lcd_reset(lcd_types[t]);
+        uint8_t positions = fake_lcd_num_positions();
         for (int lit = 0; lit < 2; lit++) {
-            fake_lcd_reset(lcd_types[t]);
-            for (uint8_t position = 0; position < fake_lcd_num_positions(); position++) {
+            for (uint8_t position = 0; position < positions; position++) {
                 for (int mask = 0; mask < 256; mask++) {
                     fake_lcd_reset(lcd_types[t]);
                     if (lit) light_everything();
