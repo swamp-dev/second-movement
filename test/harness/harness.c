@@ -557,6 +557,16 @@ watch_date_time_t movement_get_utc_date_time(void) {
     return watch_rtc_get_date_time();
 }
 
+// movement.c:698-712, without the one-second cache
+watch_date_time_t movement_get_local_date_time(void) {
+    return watch_utility_date_time_from_unix_time(watch_rtc_get_unix_time(), movement_get_current_timezone_offset());
+}
+
+// movement.c:714-716
+uint32_t movement_get_utc_timestamp(void) {
+    return watch_rtc_get_unix_time();
+}
+
 // movement.c:734-744
 void movement_set_utc_timestamp(uint32_t timestamp) {
     watch_rtc_set_unix_time(timestamp);
@@ -935,7 +945,42 @@ movement_settings_t harness_default_settings(void) {
     return settings;
 }
 
+// ---------------------------------------------------------------------------
+// Files: filesystem/filesystem.h's read call over what a test stored.
+
+static struct {
+    const char *name;
+    char data[HARNESS_MAX_FILE_SIZE];
+    size_t length;
+} files[HARNESS_MAX_FILES];
+static size_t file_count;
+
+void harness_write_file(const char *name, const void *data, size_t length) {
+    if (file_count >= HARNESS_MAX_FILES || length > HARNESS_MAX_FILE_SIZE) {
+        fprintf(stderr, "harness_write_file: no room for %s\n", name);
+        abort();
+    }
+    files[file_count].name = name;
+    memcpy(files[file_count].data, data, length);
+    files[file_count].length = length;
+    file_count++;
+}
+
+// As filesystem.c: the buffer is zeroed, then filled with up to `length`
+// bytes; false if the file is missing or empty.
+bool filesystem_read_file(char *filename, char *buf, int32_t length) {
+    memset(buf, 0, (size_t)length);
+    for (size_t i = 0; i < file_count; i++) {
+        if (strcmp(files[i].name, filename) != 0 || files[i].length == 0) continue;
+        size_t n = (size_t)length < files[i].length ? (size_t)length : files[i].length;
+        memcpy(buf, files[i].data, n);
+        return true;
+    }
+    return false;
+}
+
 void harness_init(watch_lcd_type_t lcd, watch_date_time_t utc, movement_settings_t settings) {
+    file_count = 0;
     for (uint8_t i = 0; i < MOVEMENT_NUM_FACES; i++) free(watch_face_contexts[i]);
     memset(watch_face_contexts, 0, sizeof(watch_face_contexts));
     memset(scheduled_tasks, 0, sizeof(scheduled_tasks));

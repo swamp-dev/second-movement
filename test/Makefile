@@ -9,7 +9,7 @@ LDLIBS := -lm
 # One program per test file: add test_<name> to TESTS and list its sources
 # as test_<name>_SRCS.
 TESTS := test_zodiac test_planetary test_sun_events test_pet test_filesystem test_zone_offset test_display test_segment_art
-TESTS += test_face_timer test_face_countdown
+TESTS += test_face_timer test_face_countdown test_face_moon_phase
 test_zodiac_SRCS := test_zodiac.c ../lib/zodiac/zodiac.c ../lib/sunriset/sunriset.c
 test_planetary_SRCS := test_planetary.c ../lib/planetary/planetary.c ../lib/sun_events/sun_events.c ../lib/sunriset/sunriset.c
 test_sun_events_SRCS := test_sun_events.c ../lib/sun_events/sun_events.c ../lib/sunriset/sunriset.c
@@ -40,6 +40,8 @@ build/test_face_%: CPPFLAGS += -Iharness -Ifakes -I.. -I../watch-faces -I../watc
     -I../watch-library/shared/driver -I../gossamer/common
 test_face_timer_SRCS := test_face_timer.c ../watch-faces/complication/timer_face.c $(HARNESS_SRCS)
 test_face_countdown_SRCS := test_face_countdown.c ../watch-faces/complication/countdown_face.c $(HARNESS_SRCS)
+test_face_moon_phase_SRCS := test_face_moon_phase.c ../watch-faces/complication/moon_phase_face.c $(HARNESS_SRCS)
+build/test_face_moon_phase: CPPFLAGS += -I../filesystem
 
 .PHONY: test clean
 test: $(addprefix build/,$(TESTS))
