@@ -1,5 +1,5 @@
-// Host tests for lib/pet: decay over time, actions, the save format and the
-// screen text.
+// Host tests for lib/pet: decay over time, actions, the save format, the
+// screen text and the sprite.
 
 #include <string.h>
 #include "check.h"
@@ -299,7 +299,9 @@ static void test_page_after_action(void) {
 
 // Every screen must fit both LCDs.
 static void check_screen_fits(const pet_screen_t *s) {
-    CHECK(strlen(s->top) == 5); // always all 5, so a shorter mood leaves nothing behind
+    // On custom the top is either a sprite or all 5 characters, so a shorter
+    // word leaves nothing behind.
+    if (!s->has_sprite) CHECK(strlen(s->top) == 5);
     CHECK(strlen(s->top_fallback) == 2);
     CHECK(strlen(s->bottom) == 6);
     // The classic LCD ties the top and bottom segments of bottom characters 0
@@ -312,41 +314,190 @@ static void check_screen_fits(const pet_screen_t *s) {
 }
 
 static void check_screen(const pet_state_t *pet, pet_action_t action, pet_page_t page,
-                         const char *top, const char *fallback, const char *bottom, int line) {
+                         const char *fallback, const char *bottom, int line) {
     pet_screen_t s;
     memset(&s, 0x7f, sizeof(s));
     pet_render(pet, action, page, &s);
     check_count++;
-    if (strcmp(s.top, top) || strcmp(s.top_fallback, fallback) || strcmp(s.bottom, bottom)) {
+    if (!s.has_sprite || strcmp(s.top_fallback, fallback) || strcmp(s.bottom, bottom)) {
         check_failures++;
-        fprintf(stderr, "%s:%d: screen [%s|%s|%s], expected [%s|%s|%s]\n", __FILE__, line,
-                s.top, s.top_fallback, s.bottom, top, fallback, bottom);
+        fprintf(stderr, "%s:%d: screen [%s|%s|%s], expected [sprite|%s|%s]\n", __FILE__, line,
+                s.has_sprite ? "sprite" : "text", s.top_fallback, s.bottom, fallback, bottom);
     }
     check_screen_fits(&s);
 }
-#define CHECK_SCREEN(pet, action, page, top, fallback, bottom) \
-    check_screen(pet, action, page, top, fallback, bottom, __LINE__)
+#define CHECK_SCREEN(pet, action, page, fallback, bottom) \
+    check_screen(pet, action, page, fallback, bottom, __LINE__)
+
+// ---- sprites ----
+
+#define A 0x01 // segment bits as in lib/segment_art: A top, then clockwise
+#define B 0x02 // to F, G the middle bar, H the upright in the middle
+#define C 0x04
+#define D 0x08
+#define E 0x10
+#define F 0x20
+#define G 0x40
+#define H 0x80
+
+// The frames around the face: a full box for an adult, the lower half of its
+// sides for a baby.
+#define ADULT_L (A | D | E | F)
+#define ADULT_R (A | B | C | D)
+#define BABY_L C
+#define BABY_R E
+
+#define FACE_HAPPY (B | F | D)      // eyes and a wide mouth
+#define FACE_COOL (B | F | G)       // eyes and a small mouth
+#define FACE_HUNGRY (C | D | E | G) // an open mouth
+#define FACE_TIRED (D | G)          // eyes shut, mouth shut
+#define FACE_SAD (C | E | G)        // a frown
+#define FACE_ASLEEP G               // eyes shut
+
+static pet_screen_t rendered(const pet_state_t *pet, pet_page_t page) {
+    pet_screen_t s;
+    memset(&s, 0x7f, sizeof(s));
+    pet_render(pet, PET_ACTION_FEED, page, &s);
+    return s;
+}
+
+static void check_sprite(const pet_state_t *pet, pet_page_t page, uint8_t left, uint8_t middle, uint8_t right,
+                         const char *what) {
+    pet_screen_t s = rendered(pet, page);
+    CHECK(s.has_sprite);
+    CHECK_EQ_INT(s.sprite[0], left, "%s, left", what);
+    CHECK_EQ_INT(s.sprite[1], middle, "%s, middle", what);
+    CHECK_EQ_INT(s.sprite[2], right, "%s, right", what);
+    // The two top-right characters stay clear.
+    CHECK_EQ_INT(s.sprite[3], 0, "%s, 4th", what);
+    CHECK_EQ_INT(s.sprite[4], 0, "%s, 5th", what);
+}
+
+static pet_state_t adult(void) {
+    pet_state_t pet = baby();
+    pet.stage = PET_STAGE_ADULT;
+    pet.age_minutes = PET_ADULT_AGE_MINUTES;
+    return pet;
+}
+
+// One pet in each mood, in the order pet_render tests for them.
+#define NUM_MOODS 6
+static pet_state_t in_mood(pet_state_t pet, int mood) {
+    switch (mood) {
+        case 0: break;                                    // happy
+        case 1: pet.happiness = PET_STAT_CONTENT - 1; break; // cool
+        case 2: pet.happiness = PET_STAT_CRITICAL; break;
+        case 3: pet.energy = PET_STAT_CRITICAL; break;
+        case 4: pet.fullness = PET_STAT_CRITICAL; break;
+        default: pet.asleep = true; break;
+    }
+    return pet;
+}
+
+static void test_sprite_stages(void) {
+    pet_state_t pet;
+    pet_init(&pet, T0);
+    check_sprite(&pet, PET_PAGE_ACTION, 0, A | B | C | D | E | F, 0, "egg");
+
+    pet = baby();
+    check_sprite(&pet, PET_PAGE_ACTION, BABY_L, FACE_HAPPY, BABY_R, "baby");
+    pet = adult();
+    check_sprite(&pet, PET_PAGE_ACTION, ADULT_L, FACE_HAPPY, ADULT_R, "adult");
+
+    // A cross on the ground.
+    pet.stage = PET_STAGE_DEAD;
+    check_sprite(&pet, PET_PAGE_ACTION, D, D | G | H, D, "dead");
+}
+
+static void test_sprite_moods(void) {
+    const uint8_t faces[NUM_MOODS] = {FACE_HAPPY, FACE_COOL, FACE_SAD, FACE_TIRED, FACE_HUNGRY, FACE_ASLEEP};
+    const char *const names[NUM_MOODS] = {"happy", "cool", "sad", "tired", "hungry", "asleep"};
+    for (int mood = 0; mood < NUM_MOODS; mood++) {
+        pet_state_t pet = in_mood(baby(), mood);
+        check_sprite(&pet, PET_PAGE_ACTION, BABY_L, faces[mood], BABY_R, names[mood]);
+        pet = in_mood(adult(), mood);
+        check_sprite(&pet, PET_PAGE_ACTION, ADULT_L, faces[mood], ADULT_R, names[mood]);
+    }
+
+    // The worst stat wins, in the order hungry, tired, sad; sleep hides them all.
+    pet_state_t pet = adult();
+    pet.happiness = pet.energy = pet.fullness = 0;
+    check_sprite(&pet, PET_PAGE_ACTION, ADULT_L, FACE_HUNGRY, ADULT_R, "all critical");
+    pet.fullness = PET_STAT_MAX;
+    check_sprite(&pet, PET_PAGE_ACTION, ADULT_L, FACE_TIRED, ADULT_R, "tired and sad");
+    pet.asleep = true;
+    check_sprite(&pet, PET_PAGE_ACTION, ADULT_L, FACE_ASLEEP, ADULT_R, "asleep, tired and sad");
+}
+
+// In low-energy mode the watch shows a living pet asleep; the egg and the
+// grave stay as they are.
+static void test_sprite_doze(void) {
+    pet_state_t pet = in_mood(adult(), 4);
+    check_sprite(&pet, PET_PAGE_DOZE, ADULT_L, FACE_ASLEEP, ADULT_R, "dozing adult");
+    pet = baby();
+    check_sprite(&pet, PET_PAGE_DOZE, BABY_L, FACE_ASLEEP, BABY_R, "dozing baby");
+    pet_init(&pet, T0);
+    check_sprite(&pet, PET_PAGE_DOZE, 0, A | B | C | D | E | F, 0, "dozing egg");
+    pet = adult();
+    pet.stage = PET_STAGE_DEAD;
+    check_sprite(&pet, PET_PAGE_DOZE, D, D | G | H, D, "dozing grave");
+}
+
+// Every state the player has to tell apart draws differently: the egg, the
+// grave, and each mood of the baby and of the adult.
+static void test_sprites_differ(void) {
+    pet_screen_t all[2 + 2 * NUM_MOODS];
+    size_t n = 0;
+    pet_state_t pet;
+    pet_init(&pet, T0);
+    all[n++] = rendered(&pet, PET_PAGE_ACTION);
+    pet = adult();
+    pet.stage = PET_STAGE_DEAD;
+    all[n++] = rendered(&pet, PET_PAGE_ACTION);
+    for (int mood = 0; mood < NUM_MOODS; mood++) {
+        pet = in_mood(baby(), mood);
+        all[n++] = rendered(&pet, PET_PAGE_ACTION);
+        pet = in_mood(adult(), mood);
+        all[n++] = rendered(&pet, PET_PAGE_ACTION);
+    }
+    for (size_t i = 0; i < n; i++) {
+        for (size_t j = i + 1; j < n; j++) {
+            CHECK_EQ_INT(memcmp(all[i].sprite, all[j].sprite, PET_SPRITE_WIDTH) == 0, 0,
+                         "sprites %u and %u", (unsigned)i, (unsigned)j);
+        }
+    }
+}
+
+// The sprite doesn't depend on what the bottom line shows.
+static void test_sprite_is_the_same_on_every_page(void) {
+    pet_state_t pet = in_mood(adult(), 2);
+    pet_screen_t first = rendered(&pet, PET_PAGE_ACTION);
+    for (int page = PET_PAGE_FULLNESS; page <= PET_PAGE_REFUSED; page++) {
+        pet_screen_t s = rendered(&pet, (pet_page_t)page);
+        CHECK_EQ_INT(memcmp(s.sprite, first.sprite, PET_SPRITE_WIDTH), 0, "page %d", page);
+    }
+}
 
 static void test_render_moods(void) {
     pet_state_t pet;
     pet_init(&pet, T0);
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "EGG  ", "O ", " FEEd ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "O ", " FEEd ");
 
     pet = baby();
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "HAPPY", "HA", " FEEd ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "HA", " FEEd ");
     pet.happiness = PET_STAT_CONTENT - 1;
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "COOL ", "CO", " FEEd ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "CO", " FEEd ");
     pet.happiness = PET_STAT_CRITICAL;
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SAd  ", "SA", " FEEd ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SA", " FEEd ");
     pet.energy = PET_STAT_CRITICAL;
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "tIrEd", "tI", " FEEd ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "tI", " FEEd ");
     pet.fullness = PET_STAT_CRITICAL;
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "HUNGr", "HU", " FEEd ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "HU", " FEEd ");
     pet.asleep = true;
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SLEEP", "SL", " FEEd ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SL", " FEEd ");
     pet.stage = PET_STAGE_DEAD;
     pet.asleep = false;
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "RIP  ", "RI", "AGE  0");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "RI", "AGE  0");
 }
 
 static void test_render_bottom_line(void) {
@@ -354,33 +505,33 @@ static void test_render_bottom_line(void) {
     pet.fullness = 100;
     pet.happiness = 7;
     pet.energy = 42;
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SAd  ", "SA", " FEEd ");
-    CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_ACTION, "SAd  ", "SA", " PLAY ");
-    CHECK_SCREEN(&pet, PET_ACTION_LIGHTS, PET_PAGE_ACTION, "SAd  ", "SA", " bEd  ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, "SA", " FEEd ");
+    CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_ACTION, "SA", " PLAY ");
+    CHECK_SCREEN(&pet, PET_ACTION_LIGHTS, PET_PAGE_ACTION, "SA", " bEd  ");
     pet.asleep = true; // the lights action names what it would do now
-    CHECK_SCREEN(&pet, PET_ACTION_LIGHTS, PET_PAGE_ACTION, "SLEEP", "SL", "GEt UP");
+    CHECK_SCREEN(&pet, PET_ACTION_LIGHTS, PET_PAGE_ACTION, "SL", "GEt UP");
     pet.asleep = false;
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_ACTION, "SAd  ", "SA", "StAtUS");
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_FULLNESS, "SAd  ", "SA", "EA 100");
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_HAPPINESS, "SAd  ", "SA", "HA   7");
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_ENERGY, "SAd  ", "SA", "En  42");
-    CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_REFUSED, "SAd  ", "SA", "  no  ");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_ACTION, "SA", "StAtUS");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_FULLNESS, "SA", "EA 100");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_HAPPINESS, "SA", "HA   7");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_ENERGY, "SA", "En  42");
+    CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_REFUSED, "SA", "  no  ");
 
     pet.age_minutes = 2 * 24 * 60 + 500;
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "SAd  ", "SA", "CH   2");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "SA", "CH   2");
     pet.stage = PET_STAGE_ADULT;
     pet.age_minutes = 45 * 24 * 60;
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "SAd  ", "SA", "Ad  45");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "SA", "Ad  45");
     pet.age_minutes = UINT32_MAX;
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "SAd  ", "SA", "Ad 999");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "SA", "Ad 999");
     pet.stage = PET_STAGE_DEAD;
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_FULLNESS, "RIP  ", "RI", "AGE999");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_FULLNESS, "RI", "AGE999");
 
     pet_init(&pet, T0);
-    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "EGG  ", "O ", "EGG  0");
+    CHECK_SCREEN(&pet, PET_ACTION_STATUS, PET_PAGE_AGE, "O ", "EGG  0");
     // An out-of-range action or page still yields well-formed strings.
-    CHECK_SCREEN(&pet, PET_ACTION_COUNT, PET_PAGE_ACTION, "EGG  ", "O ", "      ");
-    CHECK_SCREEN(&pet, PET_ACTION_FEED, (pet_page_t)99, "EGG  ", "O ", "      ");
+    CHECK_SCREEN(&pet, PET_ACTION_COUNT, PET_PAGE_ACTION, "O ", "      ");
+    CHECK_SCREEN(&pet, PET_ACTION_FEED, (pet_page_t)99, "O ", "      ");
 }
 
 static void test_render_doze_and_indicators(void) {
@@ -389,7 +540,7 @@ static void test_render_doze_and_indicators(void) {
     pet_render(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, &s);
     CHECK(!s.bell && !s.sleep);
     // In low-energy mode the watch shows a sleeping pet whatever its mood...
-    CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_DOZE, "SLEEP", "SL", "      ");
+    CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_DOZE, "SL", "      ");
     pet.fullness = 3;
     pet_render(&pet, PET_ACTION_FEED, PET_PAGE_DOZE, &s);
     CHECK(s.bell && !s.sleep); // ...but the bell still tells the truth.
@@ -398,7 +549,7 @@ static void test_render_doze_and_indicators(void) {
     CHECK(s.bell && s.sleep);
     pet.stage = PET_STAGE_DEAD;
     pet.asleep = false;
-    CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_DOZE, "RIP  ", "RI", "      ");
+    CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_DOZE, "RI", "      ");
     pet_render(&pet, PET_ACTION_FEED, PET_PAGE_DOZE, &s);
     CHECK(!s.bell && !s.sleep);
 }
@@ -533,6 +684,7 @@ static void test_render_unreadable(void) {
     pet_screen_t s;
     memset(&s, 0x7f, sizeof(s));
     pet_render_unreadable(&s);
+    CHECK(!s.has_sprite); // text, so it can't be taken for a pet
     CHECK(strcmp(s.top, "FILE ") == 0);
     CHECK(strcmp(s.top_fallback, "FI") == 0);
     CHECK(strcmp(s.bottom, "Error ") == 0);
@@ -805,6 +957,11 @@ int main(void) {
     test_egg_and_dead_pet_only_take_status();
     test_page_after_action();
     test_render_moods();
+    test_sprite_stages();
+    test_sprite_moods();
+    test_sprite_doze();
+    test_sprites_differ();
+    test_sprite_is_the_same_on_every_page();
     test_render_bottom_line();
     test_render_doze_and_indicators();
     test_save_round_trip();
