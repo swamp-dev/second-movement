@@ -213,7 +213,7 @@ static void set_top(pet_screen_t *screen, uint8_t left, uint8_t middle, uint8_t 
     strcpy(screen->top_fallback, letters);
 }
 
-void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, pet_screen_t *screen) {
+void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, bool second_frame, pet_screen_t *screen) {
     // Text is limited to what both LCDs draw legibly. No I, K, M, V, W or X
     // on the bottom line. On the classic LCD, bottom characters 0 and 2 can't
     // show a letter that lights the top bar without the bottom one or the
@@ -227,14 +227,25 @@ void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, pe
     screen->bell = pet_needs_attention(pet);
     screen->sleep = alive && pet->asleep;
 
+    // Low-energy mode shows a still picture.
+    if (page == PET_PAGE_DOZE) second_frame = false;
+
     if (pet->stage == PET_STAGE_DEAD) {
         set_top(screen, D, D | G | H, D, "RI");  // a cross on the ground
     } else if (pet->stage == PET_STAGE_EGG) {
-        set_top(screen, 0, A | B | C | D | E | F, 0, "O ");
+        // The second frame rocks the egg.
+        if (second_frame) set_top(screen, B, A | B | C | D | E | F, E, "O ");
+        else set_top(screen, 0, A | B | C | D | E | F, 0, "O ");
     } else {
         mood_t mood = mood_of(pet, page);
-        if (pet->stage == PET_STAGE_BABY) set_top(screen, C, moods[mood].face, E, moods[mood].letters);
-        else set_top(screen, A | D | E | F, moods[mood].face, A | B | C | D, moods[mood].letters);
+        // A sleeping pet keeps still and breathes: the line of its eyes
+        // sinks. A waking one moves its frame instead: arms up, or a hop.
+        bool breathe = second_frame && mood == MOOD_ASLEEP;
+        bool move = second_frame && mood != MOOD_ASLEEP;
+        uint8_t face = breathe ? D : moods[mood].face;
+        if (pet->stage == PET_STAGE_BABY) set_top(screen, move ? B : C, face, move ? F : E, moods[mood].letters);
+        else if (move) set_top(screen, A | E | F, face, A | B | C, moods[mood].letters);
+        else set_top(screen, A | D | E | F, face, A | B | C | D, moods[mood].letters);
     }
 
     strcpy(screen->bottom, "      ");

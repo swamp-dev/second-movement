@@ -168,6 +168,12 @@ typedef struct {
     // third: a full box around an adult, the lower half of its sides around
     // a baby. The face is the mood. An egg is an oval and a dead pet a cross
     // on the ground, both unframed. The last two characters stay blank.
+    //
+    // A living pet has a second frame, for the face to alternate with the
+    // first. The egg rocks (a mark at its upper left and lower right), a
+    // waking baby lifts its arms (the upper half of its sides), a waking
+    // adult hops (its box loses the bottom bars), and a sleeping pet
+    // breathes (the line of its shut eyes sinks to the bottom).
     bool has_sprite;
     uint8_t sprite[PET_SPRITE_WIDTH];
     char top[6];
@@ -179,7 +185,9 @@ typedef struct {
     bool sleep;           // pet asleep
 } pet_screen_t;
 
-void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, pet_screen_t *screen);
+// second_frame picks the sprite's other frame. Only the sprite differs
+// between the frames, and a dead pet and PET_PAGE_DOZE have just the first.
+void pet_render(const pet_state_t *pet, pet_action_t action, pet_page_t page, bool second_frame, pet_screen_t *screen);
 
 // The screen for PET_LOAD_UNREADABLE (see below): FILE / Error, as text on
 // both LCDs.

@@ -1,7 +1,8 @@
 // pet_face (watch-faces/complication/pet_face.c) on the face harness, on both
 // LCD types: what the top line shows for an egg, a baby, an adult, a
-// sleeping pet, low-energy mode, a dead one and an unreadable save, and that going from one
-// to the next leaves nothing of the old picture. The rules of the pet and
+// sleeping pet, low-energy mode, a dead one and an unreadable save, that going from one
+// to the next leaves nothing of the old picture, and that the picture
+// alternates between its two frames on each tick. The rules of the pet and
 // the choice of sprite are tested in test_pet.c.
 
 #include <stdio.h>
@@ -104,7 +105,8 @@ static void test_egg_hatches(void) {
     CHECK(fake_lcd_shows(WATCH_POSITION_BOTTOM, " FEEd "));
     CHECK(!harness_indicator(WATCH_INDICATOR_BELL));
 
-    harness_advance(PET_EGG_MINUTES * 60 + 1);
+    // An even number of ticks, so the first frame is showing again.
+    harness_advance(PET_EGG_MINUTES * 60 + 2);
     CHECK_EQ_INT(harness_current_face(), HARNESS_FACE_INDEX, "still on the pet");
     check_top(C, B | D | F, E, "HA", "happy baby");
 }
@@ -178,6 +180,102 @@ static void test_grave_then_new_egg(void) {
     check_top(0, EGG, 0, "O ", "new egg");
 }
 
+// On each tick the pet shows its other frame: `ticks` ticks from now, the top
+// line is the second frame, then the first, and so on. Classic shows the
+// same two letters throughout.
+static void check_alternates(int ticks, const uint8_t first[3], const uint8_t second[3], const char *classic,
+                             const char *what) {
+    for (int i = 1; i <= ticks; i++) {
+        const uint8_t *frame = i % 2 ? second : first;
+        harness_tick(1);
+        check_top(frame[0], frame[1], frame[2], classic, what);
+    }
+}
+
+static void test_frames_alternate(void) {
+    start_face(NULL);
+    check_top(0, EGG, 0, "O ", "egg, as the face opens");
+    check_alternates(6, (uint8_t[]){0, EGG, 0}, (uint8_t[]){B, EGG, E}, "O ", "egg");
+    CHECK_EQ_INT(harness_tick_frequency(), 1, "ticks a second");
+
+    pet_state_t pet = pet_at(PET_STAGE_BABY);
+    start_face(&pet);
+    check_alternates(6, (uint8_t[]){C, B | F | G, E}, (uint8_t[]){B, B | F | G, F}, "CO", "baby");
+
+    pet = pet_at(PET_STAGE_ADULT);
+    start_face(&pet);
+    check_alternates(6, (uint8_t[]){ADULT_L, B | F | G, ADULT_R}, (uint8_t[]){A | E | F, B | F | G, A | B | C}, "CO",
+                     "adult");
+
+    pet = pet_at(PET_STAGE_BABY);
+    pet.asleep = true;
+    start_face(&pet);
+    check_alternates(6, (uint8_t[]){C, G, E}, (uint8_t[]){C, D, E}, "SL", "sleeping baby");
+
+    pet = pet_at(PET_STAGE_ADULT);
+    pet.asleep = true;
+    start_face(&pet);
+    check_alternates(6, (uint8_t[]){ADULT_L, G, ADULT_R}, (uint8_t[]){ADULT_L, D, ADULT_R}, "SL", "sleeping adult");
+}
+
+// A button press draws the frame that is showing, and opening the face again
+// starts from the first frame.
+static void test_frame_survives_a_press_and_restarts_on_opening(void) {
+    pet_state_t pet = pet_at(PET_STAGE_BABY);
+    start_face(&pet);
+    harness_tick(1);
+    harness_press(BUTTON_LIGHT, PRESS_SHORT);  // PLAY
+    check_top(B, B | F | G, F, "CO", "baby, 2nd frame after a press");
+
+    harness_press(BUTTON_MODE, PRESS_SHORT);
+    CHECK_EQ_INT(harness_current_face(), 0, "left the pet");
+    harness_press(BUTTON_MODE, PRESS_SHORT);
+    CHECK_EQ_INT(harness_current_face(), HARNESS_FACE_INDEX, "back on the pet");
+    check_top(C, B | F | G, E, "CO", "baby, 1st frame on opening");
+}
+
+static void test_dead_pet_stays_still(void) {
+    pet_state_t pet = pet_at(PET_STAGE_DEAD);
+    start_face(&pet);
+    const uint8_t grave[3] = {D, D | G | H, D};
+    check_alternates(6, grave, grave, "RI", "dead");
+}
+
+// Low-energy mode has no ticks; its once-a-minute updates draw the same
+// picture every time, also when the watch went to sleep on the second frame.
+static void test_low_energy_mode_stays_still(void) {
+    pet_state_t pet = pet_at(PET_STAGE_ADULT);
+    start_face(&pet);
+    // The watch sleeps a whole number of minutes after the last press, so a
+    // press one tick in makes the number of ticks before it sleeps odd.
+    harness_tick(1);
+    harness_press(BUTTON_LIGHT, PRESS_SHORT);
+    harness_advance(10 * 60 + 1);
+    CHECK(harness_is_sleeping());
+    CHECK(((pet_face_state_t *)harness_context())->second_frame);  // or this test shows nothing
+    for (int minute = 0; minute < 4; minute++) {
+        check_top(ADULT_L, G, ADULT_R, "SL", "adult in low-energy mode");
+        harness_advance(60);
+    }
+    CHECK(harness_is_sleeping());
+
+    harness_press(BUTTON_ALARM, PRESS_SHORT);  // wakes the watch
+    check_top(ADULT_L, B | F | G, ADULT_R, "CO", "adult, 1st frame after the watch wakes");
+}
+
+// Two minutes of ticks on a pet with nothing to save write nothing: the save
+// file is swapped for a marker, and the marker is still there afterwards.
+static void test_ticks_write_nothing(void) {
+    pet_state_t pet = pet_at(PET_STAGE_ADULT);
+    start_face(&pet);
+    harness_write_file("pet.bin", "?", 1);
+    harness_tick(120);
+
+    uint8_t buf[PET_SAVE_SIZE + 1];
+    CHECK_EQ_INT(harness_read_file("pet.bin", buf, sizeof(buf)), 1, "save file size");
+    CHECK_EQ_INT(buf[0], '?', "save file contents");
+}
+
 // A save that can't be read shows text, not a pet, and a long ALARM replaces
 // it with an egg: the text's four letters must all go.
 static void test_unreadable_save_then_new_egg(void) {
@@ -204,6 +302,11 @@ int main(void) {
         test_moods_of_a_baby();
         test_low_energy_mode();
         test_grave_then_new_egg();
+        test_frames_alternate();
+        test_frame_survives_a_press_and_restarts_on_opening();
+        test_dead_pet_stays_still();
+        test_low_energy_mode_stays_still();
+        test_ticks_write_nothing();
         test_unreadable_save_then_new_egg();
     }
     return check_summary("test_face_pet");
