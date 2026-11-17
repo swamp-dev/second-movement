@@ -39,16 +39,18 @@
  * full box. The face is its mood: eyes over a wide mouth (happy) or a small
  * one (fine), a frown (sad), an open mouth (hungry), shut eyes over a shut
  * mouth (tired), shut eyes alone (asleep). A dead pet is a cross on the
- * ground.
+ * ground. A living pet moves once a second: the egg rocks, a child lifts its
+ * arms, an adult hops, and a sleeping pet breathes.
  *
  * The classic LCD has too few top segments for that, so it names the mood in
  * two letters: HA (happy), CO (cool: fine), HU (hungry), tI (tired), SA
- * (sad), SL (asleep), O for the egg, RI for a dead pet.
+ * (sad), SL (asleep), O for the egg, RI for a dead pet. The letters don't
+ * move.
  *
  * The bell indicator means a stat is critical; the sleep indicator (custom
  * LCD only) means the pet is asleep. In low-energy mode the pet is shown
- * asleep (the egg and the dead pet as they are), the bottom line is blank
- * and the sleep animation runs.
+ * asleep (the egg and the dead pet as they are) and still, the bottom line
+ * is blank and the sleep animation runs.
  *
  * LIGHT        next action: FEEd, PLAY, bEd (GEt UP while asleep), StAtUS
  * ALARM        do it. The bottom line then shows the stat it changed (after
@@ -78,12 +80,12 @@
 typedef struct {
     pet_state_t pet;
     pet_state_t saved;  // the pet as last written to the save file
-    uint32_t drawn_age; // the pet's age_minutes when the screen was last drawn
     bool has_pet;       // false until a save was loaded or the first egg was laid
     bool unreadable;    // a save file exists but can't be used; it must not be overwritten
     bool unsaved_action; // feed or play was applied since the last save
     uint8_t action;     // pet_action_t selected with LIGHT
     uint8_t page;       // pet_page_t on the bottom line
+    bool second_frame;  // which of the sprite's two frames is showing; flips every tick
 } pet_face_state_t;
 
 void pet_face_setup(uint8_t watch_face_index, void **context_ptr);

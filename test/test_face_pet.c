@@ -105,7 +105,8 @@ static void test_egg_hatches(void) {
     CHECK(fake_lcd_shows(WATCH_POSITION_BOTTOM, " FEEd "));
     CHECK(!harness_indicator(WATCH_INDICATOR_BELL));
 
-    harness_advance(PET_EGG_MINUTES * 60 + 1);
+    // An even number of ticks, so the first frame is showing again.
+    harness_advance(PET_EGG_MINUTES * 60 + 2);
     CHECK_EQ_INT(harness_current_face(), HARNESS_FACE_INDEX, "still on the pet");
     check_top(C, B | D | F, E, "HA", "happy baby");
 }

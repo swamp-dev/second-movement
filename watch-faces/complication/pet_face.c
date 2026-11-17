@@ -79,8 +79,7 @@ static void _lay_egg(pet_face_state_t *state) {
 static void _draw(pet_face_state_t *state) {
     pet_screen_t screen;
     if (state->unreadable) pet_render_unreadable(&screen);
-    else pet_render(&state->pet, (pet_action_t)state->action, (pet_page_t)state->page, &screen);
-    state->drawn_age = state->pet.age_minutes;
+    else pet_render(&state->pet, (pet_action_t)state->action, (pet_page_t)state->page, state->second_frame, &screen);
 
     if (screen.has_sprite && watch_get_lcd_type() == WATCH_LCD_TYPE_CUSTOM) {
         // The top characters left to right: 10 is the third of the top-left group.
@@ -124,6 +123,7 @@ void pet_face_activate(void *context) {
 
     state->action = PET_ACTION_FEED;
     state->page = PET_PAGE_ACTION;
+    state->second_frame = false;
 }
 
 // There is no pet to act on, and the save file must stay as it is.
@@ -164,10 +164,11 @@ bool pet_face_loop(movement_event_t event, void *context) {
 
         case EVENT_TICK:
             _catch_up(state);
-            // Redraw when the pet has lived a minute since the last draw. The
-            // minute may have been counted by pet_face_advise rather than
-            // here, so compare ages instead of trusting this catch-up.
-            if (state->pet.age_minutes != state->drawn_age) _draw(state);
+            // Every tick (once a second) shows the sprite's other frame, and
+            // with it whatever the last minute changed. The frame is not
+            // part of the pet, so flipping it saves nothing.
+            state->second_frame = !state->second_frame;
+            _draw(state);
             break;
 
         case EVENT_LOW_ENERGY_UPDATE:
