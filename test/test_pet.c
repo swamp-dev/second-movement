@@ -319,7 +319,7 @@ static void check_screen(const pet_state_t *pet, pet_action_t action, pet_page_t
                          const char *fallback, const char *bottom, int line) {
     pet_screen_t s;
     memset(&s, 0x7f, sizeof(s));
-    pet_render(pet, action, page, &s);
+    pet_render(pet, action, page, false, &s);
     check_count++;
     if (!s.has_sprite || strcmp(s.top_fallback, fallback) || strcmp(s.bottom, bottom)) {
         check_failures++;
@@ -356,16 +356,20 @@ static void check_screen(const pet_state_t *pet, pet_action_t action, pet_page_t
 #define FACE_SAD (C | E | G)        // a frown
 #define FACE_ASLEEP G               // eyes shut
 
-static pet_screen_t rendered(const pet_state_t *pet, pet_page_t page) {
+static pet_screen_t rendered_frame(const pet_state_t *pet, pet_page_t page, bool second_frame) {
     pet_screen_t s;
     memset(&s, 0x7f, sizeof(s));
-    pet_render(pet, PET_ACTION_FEED, page, &s);
+    pet_render(pet, PET_ACTION_FEED, page, second_frame, &s);
     return s;
 }
 
-static void check_sprite(const pet_state_t *pet, pet_page_t page, uint8_t left, uint8_t middle, uint8_t right,
-                         const char *what) {
-    pet_screen_t s = rendered(pet, page);
+static pet_screen_t rendered(const pet_state_t *pet, pet_page_t page) {
+    return rendered_frame(pet, page, false);
+}
+
+static void check_sprite_frame(const pet_state_t *pet, pet_page_t page, bool second_frame, uint8_t left,
+                               uint8_t middle, uint8_t right, const char *what) {
+    pet_screen_t s = rendered_frame(pet, page, second_frame);
     CHECK(s.has_sprite);
     CHECK_EQ_INT(s.sprite[0], left, "%s, left", what);
     CHECK_EQ_INT(s.sprite[1], middle, "%s, middle", what);
@@ -373,6 +377,11 @@ static void check_sprite(const pet_state_t *pet, pet_page_t page, uint8_t left, 
     // The two top-right characters stay clear.
     CHECK_EQ_INT(s.sprite[3], 0, "%s, 4th", what);
     CHECK_EQ_INT(s.sprite[4], 0, "%s, 5th", what);
+}
+
+static void check_sprite(const pet_state_t *pet, pet_page_t page, uint8_t left, uint8_t middle, uint8_t right,
+                         const char *what) {
+    check_sprite_frame(pet, page, false, left, middle, right, what);
 }
 
 static pet_state_t adult(void) {
@@ -445,22 +454,97 @@ static void test_sprite_doze(void) {
     check_sprite(&pet, PET_PAGE_DOZE, D, D | G | H, D, "dozing grave");
 }
 
-// Every state the player has to tell apart draws differently: the egg, the
-// grave, and each mood of the baby and of the adult.
-static void test_sprites_differ(void) {
-    pet_screen_t all[2 + 2 * NUM_MOODS];
-    size_t n = 0;
+// The second frame, which the face shows on every other tick. The egg rocks:
+// a mark at its upper left and one at its lower right. A waking baby lifts
+// its arms and a waking adult hops off its bottom bars, each keeping its
+// face. A sleeping pet keeps its frame and breathes: the line of its shut
+// eyes sinks to the bottom.
+#define EGG_OVAL (A | B | C | D | E | F)
+#define EGG_ROCK_L B
+#define EGG_ROCK_R E
+#define BABY_UP_L B
+#define BABY_UP_R F
+#define ADULT_HOP_L (A | E | F)
+#define ADULT_HOP_R (A | B | C)
+#define FACE_BREATH D
+
+static void test_second_frame(void) {
+    const uint8_t faces[NUM_MOODS] = {FACE_HAPPY, FACE_COOL, FACE_SAD, FACE_TIRED, FACE_HUNGRY, FACE_ASLEEP};
+    const char *const names[NUM_MOODS] = {"happy", "cool", "sad", "tired", "hungry", "asleep"};
     pet_state_t pet;
     pet_init(&pet, T0);
-    all[n++] = rendered(&pet, PET_PAGE_ACTION);
+    check_sprite_frame(&pet, PET_PAGE_ACTION, true, EGG_ROCK_L, EGG_OVAL, EGG_ROCK_R, "egg, 2nd frame");
+
+    for (int mood = 0; mood < NUM_MOODS - 1; mood++) {
+        pet = in_mood(baby(), mood);
+        check_sprite_frame(&pet, PET_PAGE_ACTION, true, BABY_UP_L, faces[mood], BABY_UP_R, names[mood]);
+        pet = in_mood(adult(), mood);
+        check_sprite_frame(&pet, PET_PAGE_ACTION, true, ADULT_HOP_L, faces[mood], ADULT_HOP_R, names[mood]);
+    }
+
+    pet = in_mood(baby(), NUM_MOODS - 1);
+    check_sprite_frame(&pet, PET_PAGE_ACTION, true, BABY_L, FACE_BREATH, BABY_R, "sleeping baby, 2nd frame");
+    pet = in_mood(adult(), NUM_MOODS - 1);
+    check_sprite_frame(&pet, PET_PAGE_ACTION, true, ADULT_L, FACE_BREATH, ADULT_R, "sleeping adult, 2nd frame");
+}
+
+// A dead pet has one frame, and so has every pet in low-energy mode.
+static void test_no_second_frame_when_dead_or_dozing(void) {
+    pet_state_t pet = adult();
+    pet.stage = PET_STAGE_DEAD;
+    check_sprite_frame(&pet, PET_PAGE_ACTION, true, D, D | G | H, D, "dead, 2nd frame");
+    check_sprite_frame(&pet, PET_PAGE_DOZE, true, D, D | G | H, D, "dozing grave, 2nd frame");
+
     pet = adult();
+    check_sprite_frame(&pet, PET_PAGE_DOZE, true, ADULT_L, FACE_ASLEEP, ADULT_R, "dozing adult, 2nd frame");
+    pet.asleep = true;
+    check_sprite_frame(&pet, PET_PAGE_DOZE, true, ADULT_L, FACE_ASLEEP, ADULT_R, "dozing sleeper, 2nd frame");
+    pet = baby();
+    check_sprite_frame(&pet, PET_PAGE_DOZE, true, BABY_L, FACE_ASLEEP, BABY_R, "dozing baby, 2nd frame");
+    pet_init(&pet, T0);
+    check_sprite_frame(&pet, PET_PAGE_DOZE, true, 0, EGG_OVAL, 0, "dozing egg, 2nd frame");
+}
+
+// The frame changes the sprite and nothing else on the screen.
+static void test_second_frame_changes_only_the_sprite(void) {
+    pet_state_t pets[4];
+    pet_init(&pets[0], T0);
+    pets[1] = in_mood(baby(), 4);
+    pets[2] = in_mood(adult(), NUM_MOODS - 1);
+    pets[3] = adult();
+    pets[3].stage = PET_STAGE_DEAD;
+    for (size_t i = 0; i < sizeof(pets) / sizeof(pets[0]); i++) {
+        for (int page = PET_PAGE_ACTION; page <= PET_PAGE_DOZE; page++) {
+            pet_screen_t first = rendered_frame(&pets[i], (pet_page_t)page, false);
+            pet_screen_t second = rendered_frame(&pets[i], (pet_page_t)page, true);
+            CHECK(second.has_sprite);
+            CHECK_EQ_INT(strcmp(first.top, second.top), 0, "top, pet %u page %d", (unsigned)i, page);
+            CHECK_EQ_INT(strcmp(first.top_fallback, second.top_fallback), 0, "fallback, pet %u page %d", (unsigned)i, page);
+            CHECK_EQ_INT(strcmp(first.bottom, second.bottom), 0, "bottom, pet %u page %d", (unsigned)i, page);
+            CHECK_EQ_INT(first.bell == second.bell && first.sleep == second.sleep, 1, "indicators, pet %u page %d",
+                         (unsigned)i, page);
+        }
+    }
+}
+
+// Every state the player has to tell apart draws differently, in either
+// frame: the egg, the grave, and each mood of the baby and of the adult.
+// The grave's two frames are the same picture, so it is in here once.
+static void test_sprites_differ(void) {
+    pet_screen_t all[1 + 2 * (1 + 2 * NUM_MOODS)];
+    size_t n = 0;
+    pet_state_t pet = adult();
     pet.stage = PET_STAGE_DEAD;
     all[n++] = rendered(&pet, PET_PAGE_ACTION);
-    for (int mood = 0; mood < NUM_MOODS; mood++) {
-        pet = in_mood(baby(), mood);
-        all[n++] = rendered(&pet, PET_PAGE_ACTION);
-        pet = in_mood(adult(), mood);
-        all[n++] = rendered(&pet, PET_PAGE_ACTION);
+    for (int second_frame = 0; second_frame < 2; second_frame++) {
+        pet_init(&pet, T0);
+        all[n++] = rendered_frame(&pet, PET_PAGE_ACTION, second_frame);
+        for (int mood = 0; mood < NUM_MOODS; mood++) {
+            pet = in_mood(baby(), mood);
+            all[n++] = rendered_frame(&pet, PET_PAGE_ACTION, second_frame);
+            pet = in_mood(adult(), mood);
+            all[n++] = rendered_frame(&pet, PET_PAGE_ACTION, second_frame);
+        }
     }
     for (size_t i = 0; i < n; i++) {
         for (size_t j = i + 1; j < n; j++) {
@@ -539,20 +623,20 @@ static void test_render_bottom_line(void) {
 static void test_render_doze_and_indicators(void) {
     pet_state_t pet = baby();
     pet_screen_t s;
-    pet_render(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, &s);
+    pet_render(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, false, &s);
     CHECK(!s.bell && !s.sleep);
     // In low-energy mode the watch shows a sleeping pet whatever its mood...
     CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_DOZE, "SL", "      ");
     pet.fullness = 3;
-    pet_render(&pet, PET_ACTION_FEED, PET_PAGE_DOZE, &s);
+    pet_render(&pet, PET_ACTION_FEED, PET_PAGE_DOZE, false, &s);
     CHECK(s.bell && !s.sleep); // ...but the bell still tells the truth.
     pet.asleep = true;
-    pet_render(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, &s);
+    pet_render(&pet, PET_ACTION_FEED, PET_PAGE_ACTION, false, &s);
     CHECK(s.bell && s.sleep);
     pet.stage = PET_STAGE_DEAD;
     pet.asleep = false;
     CHECK_SCREEN(&pet, PET_ACTION_PLAY, PET_PAGE_DOZE, "RI", "      ");
-    pet_render(&pet, PET_ACTION_FEED, PET_PAGE_DOZE, &s);
+    pet_render(&pet, PET_ACTION_FEED, PET_PAGE_DOZE, false, &s);
     CHECK(!s.bell && !s.sleep);
 }
 
@@ -962,6 +1046,9 @@ int main(void) {
     test_sprite_stages();
     test_sprite_moods();
     test_sprite_doze();
+    test_second_frame();
+    test_no_second_frame_when_dead_or_dozing();
+    test_second_frame_changes_only_the_sprite();
     test_sprites_differ();
     test_sprite_is_the_same_on_every_page();
     test_render_bottom_line();
