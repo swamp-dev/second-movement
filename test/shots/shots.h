@@ -13,7 +13,8 @@
 #include "fake_lcd.h"
 
 // `name` becomes the capture's file name: lowercase letters, digits, '-' and
-// '_', and unique for the LCD type within the program.
+// '_', starting with a letter or digit. A program reports the same names, in
+// the same order, for both LCD types.
 static inline void shot(const char *name) {
     printf("%s\t%s\t", watch_get_lcd_type() == WATCH_LCD_TYPE_CUSTOM ? "custom" : "classic", name);
     // The SLCD's whole address range, as in fake_lcd.c.

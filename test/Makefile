@@ -56,8 +56,8 @@ build/test_face_pet: CPPFLAGS += -I../filesystem
 SHOTS := shot_moon_phase shot_pet
 build/shot_%: CPPFLAGS += -Iharness -Ifakes -Ishots -I.. -I../watch-faces -I../watch-library/shared/watch \
     -I../watch-library/shared/driver -I../gossamer/common -I../filesystem
-shot_moon_phase_SRCS := shots/shot_moon_phase.c $(filter-out test_%,$(test_face_moon_phase_SRCS))
-shot_pet_SRCS := shots/shot_pet.c $(filter-out test_%,$(test_face_pet_SRCS))
+shot_moon_phase_SRCS := shots/shot_moon_phase.c $(filter-out test_face_%.c,$(test_face_moon_phase_SRCS))
+shot_pet_SRCS := shots/shot_pet.c $(filter-out test_face_%.c,$(test_face_pet_SRCS))
 
 .PHONY: test clean
 test: $(addprefix build/,$(TESTS)) $(addprefix build/,$(SHOTS))
@@ -68,7 +68,7 @@ test: $(addprefix build/,$(TESTS)) $(addprefix build/,$(SHOTS))
 # Any header in test/ or lib/ triggers a rebuild, so a header-only change is never
 # tested against a stale binary.
 HEADERS := $(wildcard *.h stubs/*.h stubs/board/*.h fakes/*.h harness/*.h shots/*.h ../movement.h ../watch-faces/*/*.h ../lib/*/*.h ../filesystem/*.h ../littlefs/*.h ../utz/*.h \
-    ../watch-library/shared/watch/*.h)
+    ../watch-library/shared/watch/*.h ../watch-library/shared/driver/*.h ../gossamer/common/*.h)
 
 build/%: $$($$*_SRCS) $(HEADERS)
 	@mkdir -p build

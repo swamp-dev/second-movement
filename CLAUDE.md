@@ -81,12 +81,12 @@ and a hosted pass are separate checks, and both are required.
 
 ## Visual review
 
-What a face draws is reviewed as pictures. `scripts/lcd-shots.py` runs a
-face on the host test harness and paints each screen onto the simulator's
-LCD artwork, on both LCD types, with no simulator build. The
-`visual-reviewer` subagent reads this section as its contract.
+`scripts/lcd-shots.py` runs a face on the host test harness and paints each
+screen onto the simulator's LCD artwork, on both LCD types, with no
+simulator build. `visual-reviewer` reads this section as its contract.
 
 - **Visual paths:** `watch-faces/**`, `lib/**`, `test/shots/**`,
+  `test/harness/**`, `test/fakes/**`, `test/Makefile`,
   `watch-library/shared/watch/watch_common_display.*`,
   `watch-library/simulator/shell.html`, `scripts/lcd-shots.py`.
 - **Capture:** `scripts/lcd-shots.py --root {root} --out {out} {targets}`.
@@ -95,20 +95,27 @@ LCD artwork, on both LCD types, with no simulator build. The
 - **Targets:** a target is a face name without `_face` (`pet`,
   `moon_phase`), one per `test/shots/shot_<face>.c`. A changed
   `watch-faces/*/<face>_face.*` or `test/shots/shot_<face>.c` maps to
-  `<face>`. A changed `lib/<dir>/` maps to every face whose `shot_<face>_SRCS`
-  in `test/Makefile` names it. A change to `lib/segment_art/`,
+  `<face>`. A changed `lib/<dir>/` maps to every face whose shot program
+  compiles a file from it: `shot_<face>_SRCS` in `test/Makefile` reuses
+  `test_face_<face>_SRCS`. A change to `lib/segment_art/`,
   `watch_common_display.*`, `shell.html`, `scripts/lcd-shots.py`,
-  `test/shots/shots.h`, `test/harness/` or `test/fakes/` means everything
-  (no targets). A target with no shot file in `{root}` is skipped, so a face
-  that gets its first shots in this branch shows up as new captures.
-- **Setup:** `command -v make cc` prints two paths, `python3 -c 'import PIL'`
-  succeeds, and Chrome or Chromium is on `PATH` (or `CHROME` names it).
-- **Baseline setup:** `git submodule update --init gossamer littlefs utz`.
+  `test/shots/shots.h`, `test/harness/`, `test/fakes/` or `test/Makefile`
+  (other than a new `shot_<face>`, which maps to `<face>`) means everything
+  (no targets). A change that maps to no face and to nothing in that list
+  needs no capture. A target with no shot file in `{root}` is skipped, so a
+  face that gets its first shots in this branch shows up as new captures.
+- **Setup:** `command -v make cc` prints two paths.
+  `git submodule status gossamer utz` shows no line starting with `-` (else
+  `git submodule update --init gossamer utz`). `python3 -c 'import PIL'`
+  succeeds (Debian: `python3-pil`). `google-chrome`, `google-chrome-stable`,
+  `chromium` or `chromium-browser` is on `PATH`, or `CHROME` names the
+  binary. Run the capture outside the nix shell: the flake provides neither
+  Pillow nor Chrome.
+- **Baseline setup:** `git submodule update --init gossamer utz`.
 - **Rubric:** the LCD is fixed segments in one colour, so the global rubric's
-  contrast, target-size, reflow, theme and viewport rules don't apply. Judge
-  these, on both LCD types (each capture's caption names the face, the LCD and
-  the shot; unlit segments are drawn faintly to show what a shape had to
-  choose from):
+  contrast, target-size, reflow, theme and viewport rules don't apply.
+  Captions name the face, LCD and shot; unlit segments are drawn faintly.
+  Judge these on both LCD types:
   - *Recognisable.* A shape reads as what its shot name says it stands for
     (a moon phase, a planet's symbol, a bar at half) to someone who hasn't
     read the code. If it doesn't, say which segments would do better. The fix
@@ -122,12 +129,13 @@ LCD artwork, on both LCD types, with no simulator build. The
     character so the two read as one glyph. Fix: the positions chosen in the
     face's draw function.
   - *Nothing lost.* Information the base capture shows is still there, unless
-    the ticket says which is replaced.
+    the ticket says which is replaced. Fix: the face's draw function.
   - *Classic is deliberate.* The classic LCD shows either the graphic or the
     text it showed before, never half of each, and its text is spelled with
-    characters classic can draw.
+    characters classic can draw. Fix: the face's classic branch, or its
+    `watch_display_text_with_fallback` strings.
   - *Order.* Bars and gauges grow in one direction, a step at a time, with
-    empty and full unmistakable.
+    empty and full unmistakable. Fix: the masks in `lib/<dir>/`.
 
 A face that draws graphics has a `test/shots/shot_<face>.c`: it drives the
 face as a face test does and calls `shot("<name>")` (`test/shots/shots.h`)

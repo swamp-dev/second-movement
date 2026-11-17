@@ -1,6 +1,6 @@
 // Captures of pet_face: the pet at each life stage and mood, both frames of
-// each picture, asleep, in low-energy mode, dead, and the unreadable-save
-// screen.
+// each picture, asleep, in low-energy mode, dead, the unreadable-save screen,
+// and every text the bottom line shows.
 
 #include <stdio.h>
 
@@ -110,6 +110,29 @@ int main(void) {
         harness_write_file("pet.bin", "?", 1);
         harness_load_face(&pet_face);
         shot("11-unreadable-save");
+
+        // The bottom line: LIGHT steps through the actions, ALARM performs one.
+        pet = pet_at(PET_STAGE_ADULT);
+        start_face(&pet);
+        harness_press(BUTTON_ALARM, PRESS_SHORT);  // a full pet won't eat
+        shot("12-action-refused");
+        harness_press(BUTTON_LIGHT, PRESS_SHORT);
+        shot("13-action-play");
+        harness_press(BUTTON_LIGHT, PRESS_SHORT);
+        shot("14-action-bed");
+        harness_press(BUTTON_ALARM, PRESS_SHORT);
+        shot("15-action-get-up");
+        harness_press(BUTTON_ALARM, PRESS_SHORT);
+        harness_press(BUTTON_LIGHT, PRESS_SHORT);
+        shot("16-action-status");
+        harness_press(BUTTON_ALARM, PRESS_SHORT);
+        shot("17-status-fullness");
+        harness_press(BUTTON_ALARM, PRESS_SHORT);
+        shot("18-status-happiness");
+        harness_press(BUTTON_ALARM, PRESS_SHORT);
+        shot("19-status-energy");
+        harness_press(BUTTON_ALARM, PRESS_SHORT);
+        shot("20-status-age");
     }
     return 0;
 }

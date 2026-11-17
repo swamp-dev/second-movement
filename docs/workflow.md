@@ -55,9 +55,9 @@ This adapts `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`; where they 
    diff touches `*.md`, `docs/` or `.claude/`, also run `docs-reviewer`.
    If it touches a visual path
    ([`CLAUDE.md` § Visual review](../CLAUDE.md#visual-review)), also run
-   `visual-reviewer`. A change to what a face draws adds or updates that
-   face's shots in `test/shots/` first, so the reviewer has the new screens
-   to look at. A `Blocked` or `Rework` verdict goes to the user.
+   `visual-reviewer`. If the change touches a face that draws graphics,
+   add or update its `test/shots/shot_<face>.c` first, so the reviewer has
+   the new screens. A `Blocked` or `Rework` verdict goes to the user.
 4. **Address findings.** Fix every critical and significant finding. If a
    fix changes behaviour, redo steps 1 and 2 for it. List any minor ones you
    don't fix in the PR body.
@@ -75,14 +75,17 @@ This adapts `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`; where they 
      `_face_setup`, `_activate`, `_loop` or `_resign`;
    - a fix in an area the first review flagged as critical or significant.
 
+   Separately, re-run `visual-reviewer` after any fix that touches a visual
+   path, however small.
+
 The PR body records what ran under a **Per-PR checklist** heading:
 - the tests added (or N/A), and the SHA of the failing-test commit for a
   bug fix (what was left untested goes in the Test plan);
 - the simulator check: done (steps in the Test plan), N/A, or the
   `manual-task` issue;
 - which reviewers ran (`code-reviewer`, plus `docs-reviewer` and
-  `visual-reviewer` when triggered, with the visual verdict) and which
-  findings were addressed;
+  `visual-reviewer` when triggered, with its verdict and the head SHA it
+  ran at) and which findings were addressed;
 - `scripts/ci-local.sh` (full matrix): `all combinations passed` at
   `<head SHA>`.
 
