@@ -26,6 +26,7 @@
 #include <string.h>
 #include "pet_face.h"
 #include "filesystem.h"
+#include "segment_art.h"
 #include "watch.h"
 
 static char PET_SAVE_FILE[] = "pet.bin";
@@ -81,7 +82,13 @@ static void _draw(pet_face_state_t *state) {
     else pet_render(&state->pet, (pet_action_t)state->action, (pet_page_t)state->page, &screen);
     state->drawn_age = state->pet.age_minutes;
 
-    watch_display_text_with_fallback(WATCH_POSITION_TOP, screen.top, screen.top_fallback);
+    if (screen.has_sprite && watch_get_lcd_type() == WATCH_LCD_TYPE_CUSTOM) {
+        // The top characters left to right: 10 is the third of the top-left group.
+        static const uint8_t positions[PET_SPRITE_WIDTH] = {0, 1, 10, 2, 3};
+        for (uint8_t i = 0; i < PET_SPRITE_WIDTH; i++) segment_art_draw(positions[i], screen.sprite[i]);
+    } else {
+        watch_display_text_with_fallback(WATCH_POSITION_TOP, screen.top, screen.top_fallback);
+    }
     watch_display_text(WATCH_POSITION_BOTTOM, screen.bottom);
     if (screen.bell) watch_set_indicator(WATCH_INDICATOR_BELL);
     else watch_clear_indicator(WATCH_INDICATOR_BELL);

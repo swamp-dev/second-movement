@@ -34,12 +34,21 @@
  * critical stat for a day, it dies. If the clock jumps forward, the pet ages
  * 12 hours at most.
  *
- * The top line is its mood (HAPPY, COOL, HUNGr, tIrEd, SAd, SLEEP, EGG, RIP;
- * on the classic LCD the first two letters, and O for the egg). The bell
- * indicator means a stat is critical; the sleep indicator (custom LCD only)
- * means the pet is asleep. In low-energy mode the top line reads SLEEP (EGG
- * or RIP if that's the pet), the bottom line is blank and the sleep
- * animation runs.
+ * On the custom LCD the top line is a picture of the pet. An egg is an oval.
+ * A hatched pet is a face in a frame: a child has short sides, an adult a
+ * full box. The face is its mood: eyes over a wide mouth (happy) or a small
+ * one (fine), a frown (sad), an open mouth (hungry), shut eyes over a shut
+ * mouth (tired), shut eyes alone (asleep). A dead pet is a cross on the
+ * ground.
+ *
+ * The classic LCD has too few top segments for that, so it names the mood in
+ * two letters: HA (happy), CO (cool: fine), HU (hungry), tI (tired), SA
+ * (sad), SL (asleep), O for the egg, RI for a dead pet.
+ *
+ * The bell indicator means a stat is critical; the sleep indicator (custom
+ * LCD only) means the pet is asleep. In low-energy mode the pet is shown
+ * asleep (the egg and the dead pet as they are), the bottom line is blank
+ * and the sleep animation runs.
  *
  * LIGHT        next action: FEEd, PLAY, bEd (GEt UP while asleep), StAtUS
  * ALARM        do it. The bottom line then shows the stat it changed (after
@@ -49,8 +58,8 @@
  *              and En (energy), each 0-100, then the life stage (EGG, CH
  *              for child, Ad for adult) with the age in days.
  * LIGHT (long) light the LED
- * ALARM (long) on the RIP screen only: hatch a new egg. RIP shows AGE and
- *              the days lived; short presses do nothing there.
+ * ALARM (long) on a dead pet only: hatch a new egg. That screen shows AGE
+ *              and the days lived; short presses do nothing there.
  *
  * FILE / Error means a saved pet exists but can't be read (a flash error, or
  * a save from a newer firmware). The save is left alone and read again each

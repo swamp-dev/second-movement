@@ -9,7 +9,7 @@ LDLIBS := -lm
 # One program per test file: add test_<name> to TESTS and list its sources
 # as test_<name>_SRCS.
 TESTS := test_zodiac test_planetary test_sun_events test_pet test_filesystem test_zone_offset test_display test_segment_art test_moon_shape
-TESTS += test_face_timer test_face_countdown test_face_moon_phase
+TESTS += test_face_timer test_face_countdown test_face_moon_phase test_face_pet
 test_zodiac_SRCS := test_zodiac.c ../lib/zodiac/zodiac.c ../lib/sunriset/sunriset.c
 test_planetary_SRCS := test_planetary.c ../lib/planetary/planetary.c ../lib/sun_events/sun_events.c ../lib/sunriset/sunriset.c
 test_sun_events_SRCS := test_sun_events.c ../lib/sun_events/sun_events.c ../lib/sunriset/sunriset.c
@@ -44,6 +44,9 @@ test_face_countdown_SRCS := test_face_countdown.c ../watch-faces/complication/co
 test_face_moon_phase_SRCS := test_face_moon_phase.c ../watch-faces/complication/moon_phase_face.c \
     ../lib/moon_shape/moon_shape.c ../lib/segment_art/segment_art.c $(HARNESS_SRCS)
 build/test_face_moon_phase: CPPFLAGS += -I../filesystem
+test_face_pet_SRCS := test_face_pet.c ../watch-faces/complication/pet_face.c \
+    ../lib/pet/pet.c ../lib/segment_art/segment_art.c $(HARNESS_SRCS)
+build/test_face_pet: CPPFLAGS += -I../filesystem
 
 .PHONY: test clean
 test: $(addprefix build/,$(TESTS))
