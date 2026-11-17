@@ -133,6 +133,17 @@ int main(void) {
         shot("19-status-energy");
         harness_press(BUTTON_ALARM, PRESS_SHORT);
         shot("20-status-age");
+
+        // The age page names the stage: an egg's and a baby's.
+        start_face(NULL);
+        for (int i = 0; i < 3; i++) harness_press(BUTTON_LIGHT, PRESS_SHORT);
+        for (int i = 0; i < 4; i++) harness_press(BUTTON_ALARM, PRESS_SHORT);
+        shot("21-status-age-egg");
+        pet = pet_at(PET_STAGE_BABY);
+        start_face(&pet);
+        for (int i = 0; i < 3; i++) harness_press(BUTTON_LIGHT, PRESS_SHORT);
+        for (int i = 0; i < 4; i++) harness_press(BUTTON_ALARM, PRESS_SHORT);
+        shot("22-status-age-baby");
     }
     return 0;
 }

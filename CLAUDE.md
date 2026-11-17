@@ -88,7 +88,9 @@ simulator build. `visual-reviewer` reads this section as its contract.
 - **Visual paths:** `watch-faces/**`, `lib/**`, `test/shots/**`,
   `test/harness/**`, `test/fakes/**`, `test/Makefile`,
   `watch-library/shared/watch/watch_common_display.*`,
-  `watch-library/simulator/shell.html`, `scripts/lcd-shots.py`.
+  `watch-library/shared/watch/watch_utility.*`, `movement.h`,
+  `filesystem/filesystem.h`, `watch-library/simulator/shell.html`,
+  `scripts/lcd-shots.py`.
 - **Capture:** `scripts/lcd-shots.py --root {root} --out {out} {targets}`.
   It writes `{out}/<face>/<classic|custom>/<shot>.png`, and fails if `{out}`
   exists.
@@ -98,7 +100,8 @@ simulator build. `visual-reviewer` reads this section as its contract.
   `<face>`. A changed `lib/<dir>/` maps to every face whose shot program
   compiles a file from it: `shot_<face>_SRCS` in `test/Makefile` reuses
   `test_face_<face>_SRCS`. A change to `lib/segment_art/`,
-  `watch_common_display.*`, `shell.html`, `scripts/lcd-shots.py`,
+  `watch_common_display.*`, `watch_utility.*`, `movement.h`,
+  `filesystem/filesystem.h`, `shell.html`, `scripts/lcd-shots.py`,
   `test/shots/shots.h`, `test/harness/`, `test/fakes/` or `test/Makefile`
   (other than a new `shot_<face>`, which maps to `<face>`) means everything
   (no targets). A change that maps to no face and to nothing in that list
@@ -111,7 +114,11 @@ simulator build. `visual-reviewer` reads this section as its contract.
   `chromium` or `chromium-browser` is on `PATH`, or `CHROME` names the
   binary. Run the capture outside the nix shell: the flake provides neither
   Pillow nor Chrome.
-- **Baseline setup:** `git submodule update --init gossamer utz`.
+- **Baseline setup:**
+  `git -c protocol.file.allow=always -c submodule.gossamer.url={main}/gossamer -c submodule.utz.url={main}/utz submodule update --init gossamer utz || git submodule update --init gossamer utz`.
+  The first form clones the two submodules from the working checkout, with no
+  network; the second is the fallback for a base that pins a commit the
+  working checkout doesn't have.
 - **Rubric:** the LCD is fixed segments in one colour, so the global rubric's
   contrast, target-size, reflow, theme and viewport rules don't apply.
   Captions name the face, LCD and shot; unlit segments are drawn faintly.
