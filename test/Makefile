@@ -8,7 +8,7 @@ LDLIBS := -lm
 
 # One program per test file: add test_<name> to TESTS and list its sources
 # as test_<name>_SRCS.
-TESTS := test_zodiac test_planetary test_sun_events test_pet test_filesystem test_zone_offset test_display test_segment_art test_moon_shape
+TESTS := test_zodiac test_planetary test_sun_events test_pet test_filesystem test_zone_offset test_display test_segment_art test_moon_shape test_watch_utility
 TESTS += test_face_timer test_face_countdown test_face_moon_phase test_face_pet
 test_zodiac_SRCS := test_zodiac.c ../lib/zodiac/zodiac.c ../lib/sunriset/sunriset.c
 test_planetary_SRCS := test_planetary.c ../lib/planetary/planetary.c ../lib/sun_events/sun_events.c ../lib/sunriset/sunriset.c
@@ -24,6 +24,11 @@ build/test_filesystem: CPPFLAGS += -Istubs -I../filesystem -I../littlefs -I../li
 # real watch.h, which needs a board pins.h (stubs/board) and gossamer's eic.h.
 test_display_SRCS := test_display.c fakes/fake_lcd.c ../watch-library/shared/watch/watch_common_display.c
 build/test_display: CPPFLAGS += -Ifakes -Istubs/board -I../watch-library/shared/watch -I../gossamer/common
+# watch_utility.c against the real utz zone table and the real watch.h, which
+# needs a board pins.h (stubs/board) and gossamer's headers. The test supplies
+# watch_get_lcd_type().
+test_watch_utility_SRCS := test_watch_utility.c ../watch-library/shared/watch/watch_utility.c ../utz/zones.c
+build/test_watch_utility: CPPFLAGS += -Istubs/board -I../watch-library/shared/watch -I../gossamer/common
 test_segment_art_SRCS := test_segment_art.c ../lib/segment_art/segment_art.c fakes/fake_lcd.c ../watch-library/shared/watch/watch_common_display.c
 build/test_segment_art: CPPFLAGS += -Ifakes -Istubs/board -I../watch-library/shared/watch -I../gossamer/common
 test_moon_shape_SRCS := test_moon_shape.c ../lib/moon_shape/moon_shape.c
