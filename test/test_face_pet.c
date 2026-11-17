@@ -196,6 +196,7 @@ static void test_frames_alternate(void) {
     start_face(NULL);
     check_top(0, EGG, 0, "O ", "egg, as the face opens");
     check_alternates(6, (uint8_t[]){0, EGG, 0}, (uint8_t[]){B, EGG, E}, "O ", "egg");
+    CHECK_EQ_INT(harness_tick_frequency(), 1, "ticks a second");
 
     pet_state_t pet = pet_at(PET_STAGE_BABY);
     start_face(&pet);
@@ -245,8 +246,13 @@ static void test_dead_pet_stays_still(void) {
 static void test_low_energy_mode_stays_still(void) {
     pet_state_t pet = pet_at(PET_STAGE_ADULT);
     start_face(&pet);
+    // The watch sleeps a whole number of minutes after the last press, so a
+    // press one tick in makes the number of ticks before it sleeps odd.
+    harness_tick(1);
+    harness_press(BUTTON_LIGHT, PRESS_SHORT);
     harness_advance(10 * 60 + 1);
     CHECK(harness_is_sleeping());
+    CHECK(((pet_face_state_t *)harness_context())->second_frame);  // or this test shows nothing
     for (int minute = 0; minute < 4; minute++) {
         check_top(ADULT_L, G, ADULT_R, "SL", "adult in low-energy mode");
         harness_advance(60);
