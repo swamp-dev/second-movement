@@ -17,6 +17,7 @@ how a ticket becomes a merged PR. Read it before starting work.
 | `watch-library/shared/watch/` | Hardware API (`watch_slcd.h` for the display, `watch_rtc.h`, …) |
 | `lib/` | Shared helpers (`sunriset`, `TOTP`, `base32`, …) |
 | `test/` | Host unit tests (`make -C test`, see [Testing](#testing)) |
+| `test/shots/`, `scripts/lcd-shots.py` | Screen captures for [visual review](#visual-review) |
 | `filesystem/`, `location/` | Stored settings and the shared location editor |
 | `template/` | Face template and the `watch_face.py` generator |
 | `gossamer/`, `littlefs/`, `tinyusb/`, `utz/` | Git submodules. Never edit them. |
@@ -77,6 +78,63 @@ The script enters the nix shell on its own, runs the host tests first, wipes
 step. Local builds use the flake's GCC 14, while hosted CI uses the older
 GCC in its `mbed-os-env:latest` image. GCC 14 is stricter, so a local pass
 and a hosted pass are separate checks, and both are required.
+
+## Visual review
+
+What a face draws is reviewed as pictures. `scripts/lcd-shots.py` runs a
+face on the host test harness and paints each screen onto the simulator's
+LCD artwork, on both LCD types, with no simulator build. The
+`visual-reviewer` subagent reads this section as its contract.
+
+- **Visual paths:** `watch-faces/**`, `lib/**`, `test/shots/**`,
+  `watch-library/shared/watch/watch_common_display.*`,
+  `watch-library/simulator/shell.html`, `scripts/lcd-shots.py`.
+- **Capture:** `scripts/lcd-shots.py --root {root} --out {out} {targets}`.
+  It writes `{out}/<face>/<classic|custom>/<shot>.png`, and fails if `{out}`
+  exists.
+- **Targets:** a target is a face name without `_face` (`pet`,
+  `moon_phase`), one per `test/shots/shot_<face>.c`. A changed
+  `watch-faces/*/<face>_face.*` or `test/shots/shot_<face>.c` maps to
+  `<face>`. A changed `lib/<dir>/` maps to every face whose `shot_<face>_SRCS`
+  in `test/Makefile` names it. A change to `lib/segment_art/`,
+  `watch_common_display.*`, `shell.html`, `scripts/lcd-shots.py`,
+  `test/shots/shots.h`, `test/harness/` or `test/fakes/` means everything
+  (no targets). A target with no shot file in `{root}` is skipped, so a face
+  that gets its first shots in this branch shows up as new captures.
+- **Setup:** `command -v make cc` prints two paths, `python3 -c 'import PIL'`
+  succeeds, and Chrome or Chromium is on `PATH` (or `CHROME` names it).
+- **Baseline setup:** `git submodule update --init gossamer littlefs utz`.
+- **Rubric:** the LCD is fixed segments in one colour, so the global rubric's
+  contrast, target-size, reflow, theme and viewport rules don't apply. Judge
+  these, on both LCD types (each capture's caption names the face, the LCD and
+  the shot; unlit segments are drawn faintly to show what a shape had to
+  choose from):
+  - *Recognisable.* A shape reads as what its shot name says it stands for
+    (a moon phase, a planet's symbol, a bar at half) to someone who hasn't
+    read the code. If it doesn't, say which segments would do better. The fix
+    is in the masks in `lib/<dir>/`.
+  - *Distinct.* No two shots of states the user must tell apart look the
+    same, or differ by one segment that is easy to miss. Fix: the masks.
+  - *Stale segments.* Nothing is lit that belongs to another state or to the
+    text the graphic replaced. Fix: the face's draw function in
+    `watch-faces/`, which must write every position it owns.
+  - *Graphic and text apart.* A graphic doesn't run into a neighbouring
+    character so the two read as one glyph. Fix: the positions chosen in the
+    face's draw function.
+  - *Nothing lost.* Information the base capture shows is still there, unless
+    the ticket says which is replaced.
+  - *Classic is deliberate.* The classic LCD shows either the graphic or the
+    text it showed before, never half of each, and its text is spelled with
+    characters classic can draw.
+  - *Order.* Bars and gauges grow in one direction, a step at a time, with
+    empty and full unmistakable.
+
+A face that draws graphics has a `test/shots/shot_<face>.c`: it drives the
+face as a face test does and calls `shot("<name>")` (`test/shots/shots.h`)
+at each screen worth looking at. Add `shot_<face>` to `SHOTS` and its
+`shot_<face>_SRCS` to `test/Makefile`. `make -C test` builds and runs every
+shot program. The captures don't replace the simulator check: buttons, blink
+and timing are checked in the real simulator.
 
 ## Adding a face
 

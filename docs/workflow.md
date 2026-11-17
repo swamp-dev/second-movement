@@ -53,6 +53,11 @@ This adapts `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md`; where they 
    follow-ups. That issue satisfies this item for the merge gate.
 3. **Code review.** Run the `code-reviewer` subagent on the diff. If the
    diff touches `*.md`, `docs/` or `.claude/`, also run `docs-reviewer`.
+   If it touches a visual path
+   ([`CLAUDE.md` § Visual review](../CLAUDE.md#visual-review)), also run
+   `visual-reviewer`. A change to what a face draws adds or updates that
+   face's shots in `test/shots/` first, so the reviewer has the new screens
+   to look at. A `Blocked` or `Rework` verdict goes to the user.
 4. **Address findings.** Fix every critical and significant finding. If a
    fix changes behaviour, redo steps 1 and 2 for it. List any minor ones you
    don't fix in the PR body.
@@ -75,8 +80,9 @@ The PR body records what ran under a **Per-PR checklist** heading:
   bug fix (what was left untested goes in the Test plan);
 - the simulator check: done (steps in the Test plan), N/A, or the
   `manual-task` issue;
-- which reviewers ran (`code-reviewer`, plus `docs-reviewer` when
-  triggered) and which findings were addressed;
+- which reviewers ran (`code-reviewer`, plus `docs-reviewer` and
+  `visual-reviewer` when triggered, with the visual verdict) and which
+  findings were addressed;
 - `scripts/ci-local.sh` (full matrix): `all combinations passed` at
   `<head SHA>`.
 
@@ -125,12 +131,14 @@ the user merges. **This repo relaxes that.** The agent may merge through
 
 These PRs always go to the user to merge, even when every condition holds:
 
-- **Gate-introducing PRs:** changes to this doc, `CLAUDE.md`'s CI commands
-  or Testing sections, `scripts/ci-local.sh`, `test/check.h`,
+- **Gate-introducing PRs:** changes to this doc, `CLAUDE.md`'s CI commands,
+  Testing or Visual review sections, `scripts/ci-local.sh`,
+  `scripts/lcd-shots.py`, `test/check.h`, `test/shots/shots.h`,
   `test/Makefile`, anything under `.claude/`, or `.github/workflows/`.
   Routine `test/Makefile` edits don't count: adding a `test_<name>` to
-  `TESTS` with its `test_<name>_SRCS`, or a `-I../lib/<dir>` to
-  `CPPFLAGS`, nor do the root `Makefile` lines for a new `lib/<dir>`.
+  `TESTS` with its `test_<name>_SRCS`, a `shot_<face>` to `SHOTS` with its
+  `shot_<face>_SRCS`, or a `-I../lib/<dir>` to `CPPFLAGS`, nor do the root
+  `Makefile` lines for a new `lib/<dir>`.
 - Submodule pointer bumps (`gossamer`, `littlefs`, `tinyusb`, `utz`).
 - Upstream syncs from `joeycastillo/second-movement`.
 
@@ -442,6 +450,7 @@ these issues. If a label is missing, create it first:
 |---|---|
 | Build, toolchain, adding a face, gotchas | [`../CLAUDE.md`](../CLAUDE.md) |
 | Local CI gate | [`../scripts/ci-local.sh`](../scripts/ci-local.sh) |
+| Screen captures for visual review | [`../scripts/lcd-shots.py`](../scripts/lcd-shots.py), [`CLAUDE.md` § Visual review](../CLAUDE.md#visual-review) |
 | Hosted CI | [`../.github/workflows/build.yml`](../.github/workflows/build.yml) |
 | Per-PR checklist, admin merge (global default) | `~/.dotfiles/.claude/rules/local-ci-and-admin-merge.md` |
 | Default merge authority, sub-agent limits | `~/.dotfiles/.claude/rules/collaboration.md` |
