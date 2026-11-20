@@ -160,9 +160,9 @@ static void test_weeknumber(void) {
     CHECK_EQ_INT(watch_utility_get_weeknumber(2024, 12, 30), 1, "2024-12-30");  // a Monday: week 1 of 2025
     CHECK_EQ_INT(watch_utility_get_weeknumber(2025, 12, 29), 1, "2025-12-29");  // a Monday: week 1 of 2026
     CHECK_EQ_INT(watch_utility_get_weeknumber(2026, 11, 17), 47, "2026-11-17");
-    // #WEEKNUM: every year after a 53-week ISO year (2021, 2027, ...) reads
+    // #140: every year after a 53-week ISO year (2021, 2027, ...) reads
     // one week high, and so do the days around those new years. The fix for
-    // #WEEKNUM turns this sweep and these checks back on.
+    // #140 turns this sweep and these checks back on.
     //   CHECK_EQ_INT(watch_utility_get_weeknumber(2020, 12, 31), 53, "2020-12-31");
     //   CHECK_EQ_INT(watch_utility_get_weeknumber(2021, 1, 1), 53, "2021-01-01");
     //   CHECK_EQ_INT(watch_utility_get_weeknumber(2021, 6, 15), 24, "2021-06-15");
