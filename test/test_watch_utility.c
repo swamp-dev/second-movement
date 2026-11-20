@@ -153,8 +153,27 @@ static void test_weekdays(void) {
     CHECK(strncmp(watch_utility_get_long_weekday(dt(2024, 2, 29, 0, 0, 0)), "THU", 3) == 0);
 }
 
+// The years from 2020 to 2099 where #140 changes no week number: every day of
+// each is checked against strftime("%V") until #140's fix widens the sweep.
+static const uint16_t weeknumber_good_years[] = {
+    2023, 2024, 2025, 2029, 2030, 2031, 2032, 2033, 2034, 2035, 2036, 2040, 2041, 2042, 2046, 2047,
+    2051, 2052, 2053, 2057, 2058, 2059, 2060, 2061, 2062, 2063, 2064, 2068, 2069, 2070, 2074, 2075,
+    2079, 2080, 2081, 2085, 2086, 2087, 2088, 2089, 2090, 2091, 2092, 2096, 2097, 2098,
+};
+
 static void test_weeknumber(void) {
-    // ISO weeks in years the bug below doesn't reach.
+    // These expect ISO 8601 weeks, which is what watch_utility.h's
+    // use_iso_8601_weeknumber == 0 gives (despite its "Sunday" comment).
+    for (size_t i = 0; i < sizeof(weeknumber_good_years) / sizeof(weeknumber_good_years[0]); i++) {
+        int failures = check_failures;
+        FOR_EACH_DAY(weeknumber_good_years[i], weeknumber_good_years[i], tm) {
+            char buf[4];
+            strftime(buf, sizeof buf, "%V", &tm);
+            int year = tm.tm_year + 1900, month = tm.tm_mon + 1, day = tm.tm_mday;
+            CHECK_EQ_INT(watch_utility_get_weeknumber(year, month, day), atoi(buf), "%04d-%02d-%02d", year, month, day);
+            if (check_failures - failures > 10) return;
+        }
+    }
     CHECK_EQ_INT(watch_utility_get_weeknumber(2024, 1, 1), 1, "2024-01-01");
     CHECK_EQ_INT(watch_utility_get_weeknumber(2024, 6, 15), 24, "2024-06-15");
     CHECK_EQ_INT(watch_utility_get_weeknumber(2024, 12, 30), 1, "2024-12-30");  // a Monday: week 1 of 2025
@@ -266,8 +285,13 @@ static void test_thermistor_temperature(void) {
     // High side: 1023 * series / (v / 64) - series == series when v == 32736.
     float high = watch_utility_thermistor_temperature(32736, true, 3380, 25, 10000, 10000);
     CHECK(fabsf(high - 25.0f) < 0.01f);
-    // On the low side a higher reading means more resistance: colder for an NTC.
-    CHECK(watch_utility_thermistor_temperature(40000, false, 3380, 25, 10000, 10000) < low);
+    // Away from nominal the B coefficient matters. Expected values come from the
+    // beta equation 1/T = 1/T0 + ln(R/R0)/B, worked by hand:
+    // low side, v = 40000: R = 10000 / (65535/40000 - 1) = 15664.8 ohm.
+    CHECK(fabsf(watch_utility_thermistor_temperature(40000, false, 3380, 25, 10000, 10000) - 13.645f) < 0.01f);
+    CHECK(fabsf(watch_utility_thermistor_temperature(40000, false, 3950, 25, 10000, 10000) - 15.230f) < 0.01f);
+    // High side, v = 20000: R = 1023 * 10000 / (20000/64) - 10000 = 22736 ohm.
+    CHECK(fabsf(watch_utility_thermistor_temperature(20000, true, 3380, 25, 10000, 10000) - 4.858f) < 0.01f);
 }
 
 static void test_time_zone_name_at_index(void) {
